@@ -9,7 +9,7 @@ import { Menu, X } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { PRESENCE } from "@/lib/data";
+import { useOnlineCount } from "@/hooks/use-online-count";
 
 const NAV_LINKS = [
   { label: "Discover", href: "/discover" },
@@ -24,11 +24,12 @@ function useActive() {
 }
 
 function OnlineStatus() {
+  const count = useOnlineCount();
   return (
     <div className="hidden items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 md:flex">
       <span className="size-1.5 rounded-full bg-accent" />
       <span className="terminal-badge text-muted">
-        {PRESENCE.online} online
+        {count} online
       </span>
     </div>
   );
