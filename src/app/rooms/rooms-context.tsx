@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { ROOMS, type Room } from "@/lib/data";
+import { ROOMS_SEED, type Room } from "@/lib/api/rooms";
 
 type RoomsContextValue = {
   rooms: Room[];
@@ -19,7 +19,7 @@ type RoomsContextValue = {
 const RoomsContext = createContext<RoomsContextValue | null>(null);
 
 export function RoomsProvider({ children }: { children: ReactNode }) {
-  const [rooms, setRooms] = useState<Room[]>(ROOMS);
+  const [rooms, setRooms] = useState<Room[]>(ROOMS_SEED);
 
   const addRoom = useCallback((room: Room) => {
     setRooms((prev) => [room, ...prev]);

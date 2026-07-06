@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Globe, Lock } from "lucide-react";
+import { AnimatePresence } from "motion/react";
 
 import { PageShell } from "@/components/page-shell";
 import { Badge } from "@/components/ui/badge";
@@ -12,58 +13,70 @@ import { UserAvatar } from "@/components/user-avatar";
 import {
   annotateGroups,
   ChatBubble,
-  type ChatBubbleMessage,
+  TypingIndicator,
 } from "@/components/chat-message";
 import { ChatComposer } from "@/components/chat-composer";
-import { timeLabel } from "@/lib/data";
+import { getGameModule } from "@/games/registry";
+import { GameComingSoon } from "@/games/game-coming-soon";
+import { CHAT_USERS, type ChatMessage, type Room } from "@/lib/data";
+import { useRoom } from "@/hooks/use-room";
 import { useRooms } from "../rooms-context";
 
-let uid = 0;
+function randomHandle(): string {
+  return CHAT_USERS[Math.floor(Math.random() * CHAT_USERS.length)];
+}
+
+function roomSeed(room: Room): ChatMessage[] {
+  return [
+    {
+      id: "r1",
+      user: room.host,
+      text: `Welcome in! We'll start ${room.gameName} once we have enough players.`,
+      time: "12:31 PM",
+    },
+    {
+      id: "r2",
+      user: room.participants.find((p) => p !== room.host) ?? "SilentIntern",
+      text: "ready when you are 👍",
+      time: "12:32 PM",
+    },
+    {
+      id: "r3",
+      user: room.participants[2] ?? "TabHoarder",
+      text: "count me in for the next round",
+      time: "12:33 PM",
+    },
+  ];
+}
 
 export default function RoomDetailPage() {
   const params = useParams<{ id: string }>();
   const { rooms, toggleJoin } = useRooms();
   const room = rooms.find((r) => r.id === params.id);
 
-  const [messages, setMessages] = useState<ChatBubbleMessage[]>(() =>
-    room
-      ? [
-          {
-            id: "r1",
-            user: room.host,
-            text: `Welcome in! We'll start ${room.gameName} once we have enough players.`,
-            time: "12:31 PM",
-          },
-          {
-            id: "r2",
-            user: room.participants.find((p) => p !== room.host) ?? "SilentIntern",
-            text: "ready when you are 👍",
-            time: "12:32 PM",
-          },
-          {
-            id: "r3",
-            user: room.participants[2] ?? "TabHoarder",
-            text: "count me in for the next round",
-            time: "12:33 PM",
-          },
-        ]
-      : []
-  );
-  const scrollRef = useRef<HTMLDivElement>(null);
+  // Anonymous identity for this room session — same pattern as the lounge.
+  const [identity] = useState<string>(() => randomHandle());
 
-  const activity = useMemo(() => {
-    if (!room) return [];
-    return [
-      { id: "1", text: `${room.host} created the room` },
-      { id: "2", text: `${room.participants[1] ?? "A player"} joined` },
-      { id: "3", text: `${room.participants[2] ?? room.host} is ready to play` },
-    ];
-  }, [room]);
+  const {
+    messages,
+    presentHandles,
+    onlineCount,
+    typingUser,
+    connected,
+    sendMessage,
+    notifyTyping,
+  } = useRoom({
+    roomId: params.id,
+    handle: identity,
+    seed: room ? roomSeed(room) : [],
+  });
+
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages.length]);
+  }, [messages.length, typingUser]);
 
   if (!room) {
     return (
@@ -85,14 +98,15 @@ export default function RoomDetailPage() {
   }
 
   const joined = room.participants.includes("You");
+  const gameModule = getGameModule(room.gameId);
 
-  const send = (text: string) => {
-    uid += 1;
-    setMessages((prev) => [
-      ...prev,
-      { id: `me-${uid}`, user: "You", text, time: timeLabel(), self: true },
-    ]);
-  };
+  // Live presence list when connected, static fallback when offline.
+  const displayParticipants =
+    connected && presentHandles.length > 0
+      ? presentHandles
+      : room.participants.slice(0, 8);
+
+  const participantCount = connected ? onlineCount : room.participants.length;
 
   const grouped = annotateGroups(messages);
 
@@ -128,11 +142,18 @@ export default function RoomDetailPage() {
                   public
                 </Badge>
               )}
+              {connected && (
+                <span className="flex items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/10 px-2 py-1">
+                  <span className="size-1.5 rounded-full bg-accent" />
+                  <span className="terminal-badge text-accent/80">live</span>
+                </span>
+              )}
             </div>
             <p className="mt-1 text-sm text-muted">
               {room.gameName} · hosted by{" "}
               <span className="text-foreground">{room.host}</span> ·{" "}
-              {room.participants.length}/{room.capacity} players
+              <span className="tabular-nums">{participantCount}</span>/
+              {room.capacity} players
             </p>
           </div>
         </div>
@@ -144,12 +165,23 @@ export default function RoomDetailPage() {
         </Button>
       </div>
 
-      {/* Chat + side panel */}
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1.7fr_1fr]">
+      {/* Game + chat */}
+      <div className="mt-8 grid gap-6 lg:grid-cols-[1.15fr_1fr]">
+        {/* Game — playable game module, or a "coming soon" placeholder */}
+        {gameModule ? (
+          <gameModule.Board roomKey={room.id} handle={identity} />
+        ) : (
+          <GameComingSoon gameName={room.gameName} gameEmoji={room.gameEmoji} />
+        )}
+
         {/* Chat */}
-        <div className="flex h-[540px] flex-col overflow-hidden rounded-2xl border border-border bg-card">
-          <div className="border-b border-border px-5 py-3.5">
+        <div className="flex h-[560px] flex-col overflow-hidden rounded-2xl border border-border bg-card">
+          <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
             <h2 className="font-display text-sm font-semibold">Room chat</h2>
+            <span className="terminal-badge text-subtle">
+              you&apos;re{" "}
+              <span className="text-muted">{identity}</span>
+            </span>
           </div>
           <div
             ref={scrollRef}
@@ -163,29 +195,47 @@ export default function RoomDetailPage() {
                 showTime={showTime}
               />
             ))}
+            <AnimatePresence>
+              {typingUser && <TypingIndicator name={typingUser} />}
+            </AnimatePresence>
           </div>
-          <ChatComposer onSend={send} placeholder="Message the room…" />
+          <ChatComposer
+            onSend={sendMessage}
+            onTyping={notifyTyping}
+            placeholder="Message the room…"
+          />
         </div>
+      </div>
 
-        {/* Side: participants + activity */}
-        <div className="flex flex-col gap-6">
+      {/* Participants + activity */}
+      <div className="mt-6 grid gap-6 sm:grid-cols-2">
           <div className="rounded-2xl border border-border bg-card p-5">
             <div className="flex items-center justify-between">
               <h2 className="font-display text-sm font-semibold">
                 Participants
               </h2>
               <span className="terminal-badge text-subtle">
-                {room.participants.length}/{room.capacity}
+                <span className="tabular-nums">{participantCount}</span>/
+                {room.capacity}
               </span>
             </div>
             <ul className="mt-4 space-y-3">
-              {room.participants.map((p) => (
+              {displayParticipants.map((p) => (
                 <li key={p} className="flex items-center gap-3">
                   <UserAvatar name={p} className="size-8" />
                   <span className="flex-1 truncate text-sm">
-                    {p === "You" ? "You" : p}
+                    {p === identity ? (
+                      <span>
+                        {p}{" "}
+                        <span className="text-xs text-muted">(you)</span>
+                      </span>
+                    ) : (
+                      p
+                    )}
                   </span>
-                  {p === room.host && <Badge variant="primary">host</Badge>}
+                  {p === room.host && !connected && (
+                    <Badge variant="primary">host</Badge>
+                  )}
                 </li>
               ))}
             </ul>
@@ -194,7 +244,17 @@ export default function RoomDetailPage() {
           <div className="rounded-2xl border border-border bg-card p-5">
             <h2 className="font-display text-sm font-semibold">Activity</h2>
             <ul className="mt-4 space-y-3">
-              {activity.map((a) => (
+              {[
+                { id: "1", text: `${room.host} created the room` },
+                {
+                  id: "2",
+                  text: `${room.participants[1] ?? "A player"} joined`,
+                },
+                {
+                  id: "3",
+                  text: `${room.participants[2] ?? room.host} is ready to play`,
+                },
+              ].map((a) => (
                 <li key={a.id} className="flex items-start gap-2.5">
                   <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-muted/50" />
                   <p className="text-[13px] leading-snug text-muted">{a.text}</p>
@@ -202,7 +262,6 @@ export default function RoomDetailPage() {
               ))}
             </ul>
           </div>
-        </div>
       </div>
     </PageShell>
   );

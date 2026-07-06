@@ -4,16 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import { useOnlineCount } from "@/hooks/use-online-count";
 import { timeLabel, type ChatMessage } from "@/lib/data";
 
-const LOUNGE_CHANNEL = "lounge:global";
-const TYPING_CLEAR_MS = 2500; // hide "X is typing" after this idle gap
-const TYPING_THROTTLE_MS = 1200; // don't broadcast typing more often than this
-const MAX_MESSAGES = 60; // keep the client buffer bounded
+const TYPING_CLEAR_MS = 2500;
+const TYPING_THROTTLE_MS = 1200;
+const MAX_MESSAGES = 60;
 
-export type LoungeState = {
+export type RoomState = {
   messages: ChatMessage[];
+  /** Handles currently tracked in Presence for this room. */
+  presentHandles: string[];
   onlineCount: number;
   typingUser: string | null;
   connected: boolean;
@@ -22,26 +22,27 @@ export type LoungeState = {
 };
 
 /**
- * Realtime Anonymous Lounge over Supabase Realtime.
+ * Per-room realtime over Supabase Realtime.
  *
- * - Broadcast → ephemeral chat + typing (no DB writes; nothing persisted)
+ * Each room gets an isolated channel `room:{roomId}`:
+ * - Presence  → live participant list + online count
+ * - Broadcast → ephemeral chat + typing (nothing written to DB)
  *
- * The live online count comes from the shared {@link useOnlineCount} presence
- * channel so the lounge and the navbar badge always show the same number.
- *
- * Chat is intentionally ephemeral (Broadcast), matching the roadmap: cheaper,
- * lower latency, and far less moderation/storage liability than persisting
- * every message.
+ * Mirrors the lounge pattern but scoped to a specific room so presence
+ * counts are per-room rather than global.
  */
-export function useLounge({
+export function useRoom({
+  roomId,
   handle,
   seed = [],
 }: {
+  roomId: string;
   handle: string;
   seed?: ChatMessage[];
-}): LoungeState {
+}): RoomState {
   const [messages, setMessages] = useState<ChatMessage[]>(seed);
-  const onlineCount = useOnlineCount();
+  const [presentHandles, setPresentHandles] = useState<string[]>([]);
+  const [onlineCount, setOnlineCount] = useState(1);
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
 
@@ -56,12 +57,16 @@ export function useLounge({
   const lastTypingSent = useRef(0);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured || !roomId) return;
 
     const supabase = getSupabaseClient();
-    const channel = supabase.channel(LOUNGE_CHANNEL, {
+    // Unique key per tab so multiple open tabs each register as a distinct peer.
+    const presenceKey =
+      globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
+    const channel = supabase.channel(`room:${roomId}`, {
       config: {
-        broadcast: { self: false }, // we add our own messages optimistically
+        broadcast: { self: false }, // own messages added optimistically
+        presence: { key: presenceKey },
       },
     });
     channelRef.current = channel;
@@ -83,8 +88,25 @@ export function useLounge({
           TYPING_CLEAR_MS
         );
       })
-      .subscribe((status) => {
-        setConnected(status === "SUBSCRIBED");
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState<{ user: string }>();
+        const handles = Object.values(state)
+          .flat()
+          .map((p) => p.user)
+          .filter((h): h is string => Boolean(h));
+        setPresentHandles([...new Set(handles)]);
+        setOnlineCount(Math.max(1, Object.keys(state).length));
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          setConnected(true);
+          await channel.track({
+            user: handleRef.current,
+            online_at: new Date().toISOString(),
+          });
+        } else {
+          setConnected(false);
+        }
       });
 
     return () => {
@@ -92,7 +114,17 @@ export function useLounge({
       channelRef.current = null;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [roomId]);
+
+  // Re-announce when handle changes (shuffle).
+  useEffect(() => {
+    if (connected) {
+      channelRef.current?.track({
+        user: handle,
+        online_at: new Date().toISOString(),
+      });
+    }
+  }, [handle, connected]);
 
   const sendMessage = useCallback((text: string) => {
     const clean = text.trim();
@@ -103,7 +135,6 @@ export function useLounge({
       text: clean,
       time: timeLabel(),
     };
-    // Optimistic: show our own message immediately on the right.
     setMessages((prev) => [...prev, { ...msg, self: true }].slice(-MAX_MESSAGES));
     channelRef.current?.send({
       type: "broadcast",
@@ -123,5 +154,13 @@ export function useLounge({
     });
   }, []);
 
-  return { messages, onlineCount, typingUser, connected, sendMessage, notifyTyping };
+  return {
+    messages,
+    presentHandles,
+    onlineCount,
+    typingUser,
+    connected,
+    sendMessage,
+    notifyTyping,
+  };
 }

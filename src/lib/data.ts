@@ -8,6 +8,7 @@ import {
   Puzzle,
   HelpCircle,
   Keyboard,
+  CircleDot,
   type LucideIcon,
 } from "lucide-react";
 
@@ -39,6 +40,16 @@ export type Game = {
 };
 
 export const GAMES: Game[] = [
+  {
+    id: "connect-four",
+    name: "Connect Four",
+    category: "Casual",
+    players: 64,
+    emoji: "🔴",
+    icon: CircleDot,
+    isNew: true,
+    blurb: "Drop, line up four, and outsmart a coworker. The first live game.",
+  },
   {
     id: "geo-challenge",
     name: "Geo Challenge",
@@ -145,6 +156,8 @@ export type RoomStatus = "live" | "filling up" | "open";
 export type Room = {
   id: string;
   title: string;
+  /** Which game this room plays — looked up in the game registry. */
+  gameId: string;
   gameName: string;
   gameEmoji: string;
   host: string;
@@ -157,8 +170,35 @@ export type Room = {
 
 export const ROOMS: Room[] = [
   {
+    id: "connect-four-corner",
+    title: "Connect Four Corner",
+    gameId: "connect-four",
+    gameName: "Connect Four",
+    gameEmoji: "🔴",
+    host: "CoffeeWizard",
+    participants: ["CoffeeWizard", "Nadia"],
+    capacity: 2,
+    visibility: "public",
+    category: "Casual",
+    status: "open",
+  },
+  {
+    id: "four-in-a-row-lunch",
+    title: "Four in a Row @ Lunch",
+    gameId: "connect-four",
+    gameName: "Connect Four",
+    gameEmoji: "🔴",
+    host: "SnackGremlin",
+    participants: ["SnackGremlin"],
+    capacity: 2,
+    visibility: "public",
+    category: "Casual",
+    status: "open",
+  },
+  {
     id: "coffee-break-trivia",
     title: "Coffee Break Trivia",
+    gameId: "trivia-night",
     gameName: "Trivia Night",
     gameEmoji: "☕",
     host: "CoffeeWizard",
@@ -180,6 +220,7 @@ export const ROOMS: Room[] = [
   {
     id: "geo-challenge-id",
     title: "Geo Challenge Indonesia",
+    gameId: "geo-challenge",
     gameName: "Geo Challenge",
     gameEmoji: "🌎",
     host: "TabHoarder",
@@ -192,6 +233,7 @@ export const ROOMS: Room[] = [
   {
     id: "lunch-doodles",
     title: "Lunch Doodles",
+    gameId: "draw-together",
     gameName: "Draw Together",
     gameEmoji: "🎨",
     host: "LunchBreakHero",
@@ -217,6 +259,7 @@ export const ROOMS: Room[] = [
   {
     id: "sudoku-sprint",
     title: "Sudoku Sprint",
+    gameId: "sudoku-arena",
     gameName: "Sudoku Arena",
     gameEmoji: "🔢",
     host: "SilentIntern",
@@ -229,6 +272,7 @@ export const ROOMS: Room[] = [
   {
     id: "slump-club",
     title: "3PM Slump Club",
+    gameId: "dice-royale",
     gameName: "Dice Royale",
     gameEmoji: "🎲",
     host: "MeetingSurvivor",
@@ -248,6 +292,7 @@ export const ROOMS: Room[] = [
   {
     id: "design-only",
     title: "Design Team Only",
+    gameId: "word-clash",
     gameName: "Word Clash",
     gameEmoji: "🔤",
     host: "PixelPusher",
@@ -260,6 +305,7 @@ export const ROOMS: Room[] = [
   {
     id: "memory-masters",
     title: "Memory Masters",
+    gameId: "memory-battle",
     gameName: "Memory Battle",
     gameEmoji: "🧠",
     host: "KeyboardNinja",
@@ -272,6 +318,7 @@ export const ROOMS: Room[] = [
   {
     id: "type-racer-lunch",
     title: "Type Racer Lunch",
+    gameId: "type-racer",
     gameName: "Type Racer",
     gameEmoji: "⌨️",
     host: "SnackGremlin",
