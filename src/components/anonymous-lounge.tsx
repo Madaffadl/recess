@@ -30,6 +30,9 @@ function OnlineCount({ count }: { count: number }) {
 
 export function AnonymousLounge() {
   const [identity, setIdentity] = useState<string>(() => randomHandle());
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
   const { messages, onlineCount, typingUser, sendMessage, notifyTyping } =
     useLounge({ handle: identity, seed: CHAT_SEED });
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -43,6 +46,25 @@ export function AnonymousLounge() {
   const shuffleIdentity = useCallback(() => {
     setIdentity((prev) => randomHandle(prev));
   }, []);
+
+  const startEditing = useCallback(() => {
+    setDraft(identity);
+    setIsEditing(true);
+  }, [identity]);
+
+  const commitEdit = useCallback(() => {
+    const trimmed = draft.trim();
+    if (trimmed.length > 0) setIdentity(trimmed);
+    setIsEditing(false);
+  }, [draft]);
+
+  const cancelEdit = useCallback(() => {
+    setIsEditing(false);
+  }, []);
+
+  useEffect(() => {
+    if (isEditing) inputRef.current?.select();
+  }, [isEditing]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -64,7 +86,34 @@ export function AnonymousLounge() {
         <div className="mt-2.5 flex items-center justify-between">
           <p className="terminal-badge text-subtle">
             you&apos;re anonymous as{" "}
-            <span className="text-muted">{identity}</span>
+            {isEditing ? (
+              <input
+                ref={inputRef}
+                type="text"
+                value={draft}
+                maxLength={16}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitEdit();
+                  if (e.key === "Escape") cancelEdit();
+                }}
+                className="terminal-badge w-32 border-b border-muted bg-transparent text-foreground outline-none"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            ) : (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={startEditing}
+                onKeyDown={(e) => e.key === "Enter" && startEditing()}
+                title="Click to set a custom name"
+                className="cursor-text rounded px-0.5 text-muted underline-offset-2 hover:underline"
+              >
+                {identity}
+              </span>
+            )}
           </p>
           <button
             type="button"
