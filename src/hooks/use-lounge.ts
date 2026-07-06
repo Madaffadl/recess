@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { useOnlineCount } from "@/hooks/use-online-count";
 import { timeLabel, type ChatMessage } from "@/lib/data";
 
 const LOUNGE_CHANNEL = "lounge:global";
@@ -23,8 +24,10 @@ export type LoungeState = {
 /**
  * Realtime Anonymous Lounge over Supabase Realtime.
  *
- * - Presence  → live online count
  * - Broadcast → ephemeral chat + typing (no DB writes; nothing persisted)
+ *
+ * The live online count comes from the shared {@link useOnlineCount} presence
+ * channel so the lounge and the navbar badge always show the same number.
  *
  * Chat is intentionally ephemeral (Broadcast), matching the roadmap: cheaper,
  * lower latency, and far less moderation/storage liability than persisting
@@ -38,7 +41,7 @@ export function useLounge({
   seed?: ChatMessage[];
 }): LoungeState {
   const [messages, setMessages] = useState<ChatMessage[]>(seed);
-  const [onlineCount, setOnlineCount] = useState(1);
+  const onlineCount = useOnlineCount();
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
 
@@ -56,13 +59,9 @@ export function useLounge({
     if (!isSupabaseConfigured) return;
 
     const supabase = getSupabaseClient();
-    // A per-tab presence key so multiple tabs of one browser each count as a peer.
-    const presenceKey =
-      globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
     const channel = supabase.channel(LOUNGE_CHANNEL, {
       config: {
         broadcast: { self: false }, // we add our own messages optimistically
-        presence: { key: presenceKey },
       },
     });
     channelRef.current = channel;
@@ -84,20 +83,8 @@ export function useLounge({
           TYPING_CLEAR_MS
         );
       })
-      .on("presence", { event: "sync" }, () => {
-        const count = Object.keys(channel.presenceState()).length;
-        setOnlineCount(Math.max(1, count));
-      })
-      .subscribe(async (status) => {
-        if (status === "SUBSCRIBED") {
-          setConnected(true);
-          await channel.track({
-            user: handleRef.current,
-            online_at: new Date().toISOString(),
-          });
-        } else {
-          setConnected(false);
-        }
+      .subscribe((status) => {
+        setConnected(status === "SUBSCRIBED");
       });
 
     return () => {
@@ -106,16 +93,6 @@ export function useLounge({
       supabase.removeChannel(channel);
     };
   }, []);
-
-  // Re-announce presence when the handle changes (identity shuffle).
-  useEffect(() => {
-    if (connected) {
-      channelRef.current?.track({
-        user: handle,
-        online_at: new Date().toISOString(),
-      });
-    }
-  }, [handle, connected]);
 
   const sendMessage = useCallback((text: string) => {
     const clean = text.trim();

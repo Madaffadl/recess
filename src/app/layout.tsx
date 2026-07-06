@@ -5,6 +5,7 @@ import { Providers } from "@/components/providers";
 import { SiteBackground } from "@/components/site-background";
 import { Navbar } from "@/components/navbar";
 import { SiteFooter } from "@/components/site-footer";
+import { AnonymousLounge } from "@/components/anonymous-lounge";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -74,7 +75,12 @@ export default function RootLayout({
           <SiteBackground />
           <div className="relative flex min-h-screen flex-col">
             <Navbar />
-            <main className="flex-1">{children}</main>
+            <div className="flex flex-1">
+              <main className="min-w-0 flex-1">{children}</main>
+              <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-[360px] shrink-0 p-4 lg:block">
+                <AnonymousLounge />
+              </aside>
+            </div>
             <SiteFooter />
           </div>
         </Providers>
