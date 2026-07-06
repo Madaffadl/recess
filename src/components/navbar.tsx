@@ -85,13 +85,6 @@ export function Navbar() {
 
         <div className="flex items-center gap-2 sm:gap-3">
           <OnlineStatus />
-          <Button variant="ghost" size="sm" className="hidden sm:inline-flex">
-            Sign In
-          </Button>
-          <Button size="sm" className="hidden sm:inline-flex">
-            Join Recess
-          </Button>
-
           <button
             type="button"
             aria-label="Toggle menu"
@@ -128,14 +121,6 @@ export function Navbar() {
                   {link.label}
                 </Link>
               ))}
-              <div className="mt-3 flex gap-2">
-                <Button variant="secondary" size="sm" className="flex-1">
-                  Sign In
-                </Button>
-                <Button size="sm" className="flex-1">
-                  Join Recess
-                </Button>
-              </div>
             </div>
           </motion.div>
         )}
