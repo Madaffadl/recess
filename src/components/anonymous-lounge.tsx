@@ -12,7 +12,7 @@ import {
 import { ChatComposer } from "@/components/chat-composer";
 import { useLounge } from "@/hooks/use-lounge";
 import { ensureAnonymousSession } from "@/lib/api/session";
-import { CHAT_SEED, CHAT_USERS } from "@/lib/data";
+import { CHAT_USERS } from "@/lib/data";
 
 function randomHandle(exclude?: string): string {
   const pool = exclude ? CHAT_USERS.filter((u) => u !== exclude) : CHAT_USERS;
@@ -34,7 +34,7 @@ export function AnonymousLounge() {
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const { messages, onlineCount, typingUser, sendMessage, notifyTyping } =
-    useLounge({ handle: identity, seed: CHAT_SEED });
+    useLounge({ handle: identity });
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Establish an anonymous Supabase session (best-effort; foundation for the
