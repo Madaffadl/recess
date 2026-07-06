@@ -16,9 +16,11 @@ const MAX = 300;
 
 export function ChatComposer({
   onSend,
+  onTyping,
   placeholder = "Message the lounge…",
 }: {
   onSend: (text: string) => void;
+  onTyping?: () => void;
   placeholder?: string;
 }) {
   const [value, setValue] = useState("");
@@ -33,7 +35,9 @@ export function ChatComposer({
   };
 
   const setText = (v: string) => {
-    setValue(v.slice(0, MAX));
+    const next = v.slice(0, MAX);
+    setValue(next);
+    if (next.trim()) onTyping?.();
     requestAnimationFrame(grow);
   };
 

@@ -93,16 +93,17 @@ export function TypingIndicator({ name }: { name: string }) {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
-      className="mt-3 flex gap-2.5"
+      className="mt-3 flex items-end gap-2.5"
     >
       <div className="w-7 shrink-0">
         <UserAvatar name={name} className="size-7" />
       </div>
-      <div className="flex flex-col items-start">
-        <span className="mb-1 px-1 text-xs font-semibold text-foreground">
-          {name}
+      <div className="flex items-center gap-2 rounded-2xl rounded-tl-md border border-border bg-white/[0.04] px-3.5 py-2.5 shadow-sm">
+        <span className="text-xs text-muted">
+          <span className="font-medium text-foreground/90">{name}</span> is
+          typing
         </span>
-        <div className="flex items-center gap-1 rounded-2xl rounded-tl-md border border-border bg-white/[0.04] px-3.5 py-3 shadow-sm">
+        <span className="flex items-center gap-1">
           {[0, 1, 2].map((i) => (
             <motion.span
               key={i}
@@ -116,7 +117,7 @@ export function TypingIndicator({ name }: { name: string }) {
               }}
             />
           ))}
-        </div>
+        </span>
       </div>
     </motion.div>
   );

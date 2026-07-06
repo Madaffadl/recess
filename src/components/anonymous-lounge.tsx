@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import { Dices } from "lucide-react";
 
@@ -10,100 +10,44 @@ import {
   TypingIndicator,
 } from "@/components/chat-message";
 import { ChatComposer } from "@/components/chat-composer";
-import { useCountUp } from "@/hooks/use-count-up";
-import {
-  CHAT_LINES,
-  CHAT_SEED,
-  CHAT_USERS,
-  PRESENCE,
-  timeLabel,
-  type ChatMessage,
-} from "@/lib/data";
+import { useLounge } from "@/hooks/use-lounge";
+import { ensureAnonymousSession } from "@/lib/api/session";
+import { CHAT_SEED, CHAT_USERS } from "@/lib/data";
 
-let uid = 100;
+function randomHandle(exclude?: string): string {
+  const pool = exclude ? CHAT_USERS.filter((u) => u !== exclude) : CHAT_USERS;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
-function OnlineCount() {
-  const n = useCountUp(PRESENCE.online, { duration: 1400 });
+function OnlineCount({ count }: { count: number }) {
   return (
     <span className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1">
       <span className="size-1.5 rounded-full bg-accent" />
-      <span className="terminal-badge text-muted">{n} online</span>
+      <span className="terminal-badge text-muted">{count} online</span>
     </span>
   );
 }
 
 export function AnonymousLounge() {
-  const [messages, setMessages] = useState<ChatMessage[]>(CHAT_SEED);
-  const [typing, setTyping] = useState<string | null>(null);
-  const [identity, setIdentity] = useState("CoffeeWizard");
+  const [identity, setIdentity] = useState<string>(() => randomHandle());
+  const { messages, onlineCount, typingUser, sendMessage, notifyTyping } =
+    useLounge({ handle: identity, seed: CHAT_SEED });
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const others = useMemo(
-    () => CHAT_USERS.filter((u) => u !== identity),
-    [identity]
-  );
-
-  const shuffleIdentity = useCallback(() => {
-    setIdentity(CHAT_USERS[Math.floor(Math.random() * CHAT_USERS.length)]);
+  // Establish an anonymous Supabase session (best-effort; foundation for the
+  // room + game phases). The lounge itself works with just the anon key.
+  useEffect(() => {
+    ensureAnonymousSession();
   }, []);
 
-  useEffect(() => {
-    shuffleIdentity();
-  }, [shuffleIdentity]);
-
-  // Live chat simulation: someone types, then a message lands.
-  useEffect(() => {
-    let cancelled = false;
-    let t1: ReturnType<typeof setTimeout>;
-    let t2: ReturnType<typeof setTimeout>;
-
-    const loop = () => {
-      t1 = setTimeout(
-        () => {
-          if (cancelled) return;
-          const user = others[Math.floor(Math.random() * others.length)];
-          setTyping(user);
-          t2 = setTimeout(() => {
-            if (cancelled) return;
-            setTyping(null);
-            const text =
-              CHAT_LINES[Math.floor(Math.random() * CHAT_LINES.length)];
-            uid += 1;
-            setMessages((prev) =>
-              [
-                ...prev,
-                { id: `sim-${uid}`, user, text, time: timeLabel() },
-              ].slice(-40)
-            );
-            loop();
-          }, 1500);
-        },
-        2800 + Math.random() * 2600
-      );
-    };
-
-    loop();
-    return () => {
-      cancelled = true;
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [others]);
+  const shuffleIdentity = useCallback(() => {
+    setIdentity((prev) => randomHandle(prev));
+  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages.length, typing]);
-
-  const send = (text: string) => {
-    uid += 1;
-    setMessages((prev) =>
-      [
-        ...prev,
-        { id: `me-${uid}`, user: identity, text, time: timeLabel(), self: true },
-      ].slice(-40)
-    );
-  };
+  }, [messages.length, typingUser]);
 
   const grouped = annotateGroups(messages);
 
@@ -115,7 +59,7 @@ export function AnonymousLounge() {
           <h2 className="font-display text-[15px] font-semibold tracking-tight">
             Anonymous Lounge
           </h2>
-          <OnlineCount />
+          <OnlineCount count={onlineCount} />
         </div>
         <div className="mt-2.5 flex items-center justify-between">
           <p className="terminal-badge text-subtle">
@@ -134,10 +78,7 @@ export function AnonymousLounge() {
       </div>
 
       {/* Messages */}
-      <div
-        ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
-      >
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {grouped.map(({ message, showHeader, showTime }) => (
           <ChatBubble
             key={message.id}
@@ -147,12 +88,16 @@ export function AnonymousLounge() {
           />
         ))}
         <AnimatePresence>
-          {typing && <TypingIndicator name={typing} />}
+          {typingUser && <TypingIndicator name={typingUser} />}
         </AnimatePresence>
       </div>
 
       {/* Composer */}
-      <ChatComposer onSend={send} placeholder="Message the lounge…" />
+      <ChatComposer
+        onSend={sendMessage}
+        onTyping={notifyTyping}
+        placeholder="Message the lounge…"
+      />
     </div>
   );
 }
