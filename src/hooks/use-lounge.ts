@@ -44,24 +44,25 @@ export function useLounge({
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const handleRef = useRef(handle);
-  handleRef.current = handle;
+  useEffect(() => {
+    handleRef.current = handle;
+  }, [handle]);
   const typingClearTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined
   );
   const lastTypingSent = useRef(0);
-  // A per-tab presence key so multiple tabs of one browser each count as a peer.
-  const presenceKey = useRef<string>(
-    globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
-  );
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
     const supabase = getSupabaseClient();
+    // A per-tab presence key so multiple tabs of one browser each count as a peer.
+    const presenceKey =
+      globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
     const channel = supabase.channel(LOUNGE_CHANNEL, {
       config: {
         broadcast: { self: false }, // we add our own messages optimistically
-        presence: { key: presenceKey.current },
+        presence: { key: presenceKey },
       },
     });
     channelRef.current = channel;

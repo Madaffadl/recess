@@ -83,12 +83,17 @@ create policy "authenticated users can update rooms"
 -- ─────────────────────────────────────────────────────────────
 -- game_session
 -- Created when a game starts inside a room.
--- `state` is a JSONB blob — schema is game-specific (Phase 3).
+--
+-- `room_key` is the room's slug (e.g. "coffee-break-trivia"). It is a plain
+-- text key rather than an FK to `room` so games work against the current
+-- in-memory rooms; Phase 4 will backfill/join to `room` when rooms move to DB.
+--
+-- `state` is a JSONB blob — schema is game-specific (see 0002 for Connect Four).
 -- Realtime Changes on this table power the live game board.
 -- ─────────────────────────────────────────────────────────────
 create table if not exists public.game_session (
   id          uuid        primary key default uuid_generate_v4(),
-  room_id     uuid        not null references public.room (id) on delete cascade,
+  room_key    text        not null,
   game_id     text        not null,
   state       jsonb       not null default '{}',
   status      text        not null default 'waiting'
@@ -97,19 +102,21 @@ create table if not exists public.game_session (
   updated_at  timestamptz not null default now()
 );
 
+create index if not exists game_session_room_key_idx
+  on public.game_session (room_key, status);
+
 alter table public.game_session enable row level security;
 
+-- Readable by any authenticated (incl. anonymous) user — powers realtime
+-- board sync + spectating.
 create policy "game sessions readable by authenticated users"
   on public.game_session for select
   using (auth.uid() is not null);
 
-create policy "authenticated users can create game sessions"
-  on public.game_session for insert
-  with check (auth.uid() is not null);
-
-create policy "authenticated users can update game sessions"
-  on public.game_session for update
-  using (auth.uid() is not null);
+-- NOTE: there are intentionally NO client INSERT/UPDATE/DELETE policies.
+-- All writes go through the SECURITY DEFINER functions in
+-- 0002_connect_four.sql, which enforce seating, turn order, and move
+-- legality server-side. A client cannot write an illegal board state.
 
 -- Auto-bump updated_at on every state change
 create or replace function public.touch_updated_at()

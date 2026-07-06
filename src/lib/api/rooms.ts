@@ -18,6 +18,7 @@ export async function getRoom(id: string): Promise<Room | null> {
 
 export type CreateRoomInput = {
   title: string;
+  gameId: string;
   gameName: string;
   gameEmoji: string;
   capacity: number;

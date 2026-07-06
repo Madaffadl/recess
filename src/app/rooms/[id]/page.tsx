@@ -16,6 +16,8 @@ import {
   TypingIndicator,
 } from "@/components/chat-message";
 import { ChatComposer } from "@/components/chat-composer";
+import { getGameModule } from "@/games/registry";
+import { GameComingSoon } from "@/games/game-coming-soon";
 import { CHAT_USERS, type ChatMessage, type Room } from "@/lib/data";
 import { useRoom } from "@/hooks/use-room";
 import { useRooms } from "../rooms-context";
@@ -96,6 +98,7 @@ export default function RoomDetailPage() {
   }
 
   const joined = room.participants.includes("You");
+  const gameModule = getGameModule(room.gameId);
 
   // Live presence list when connected, static fallback when offline.
   const displayParticipants =
@@ -162,10 +165,17 @@ export default function RoomDetailPage() {
         </Button>
       </div>
 
-      {/* Chat + side panel */}
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1.7fr_1fr]">
+      {/* Game + chat */}
+      <div className="mt-8 grid gap-6 lg:grid-cols-[1.15fr_1fr]">
+        {/* Game — playable game module, or a "coming soon" placeholder */}
+        {gameModule ? (
+          <gameModule.Board roomKey={room.id} handle={identity} />
+        ) : (
+          <GameComingSoon gameName={room.gameName} gameEmoji={room.gameEmoji} />
+        )}
+
         {/* Chat */}
-        <div className="flex h-[540px] flex-col overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="flex h-[560px] flex-col overflow-hidden rounded-2xl border border-border bg-card">
           <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
             <h2 className="font-display text-sm font-semibold">Room chat</h2>
             <span className="terminal-badge text-subtle">
@@ -195,9 +205,10 @@ export default function RoomDetailPage() {
             placeholder="Message the room…"
           />
         </div>
+      </div>
 
-        {/* Side: participants + activity */}
-        <div className="flex flex-col gap-6">
+      {/* Participants + activity */}
+      <div className="mt-6 grid gap-6 sm:grid-cols-2">
           <div className="rounded-2xl border border-border bg-card p-5">
             <div className="flex items-center justify-between">
               <h2 className="font-display text-sm font-semibold">
@@ -251,7 +262,6 @@ export default function RoomDetailPage() {
               ))}
             </ul>
           </div>
-        </div>
       </div>
     </PageShell>
   );

@@ -48,24 +48,25 @@ export function useRoom({
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const handleRef = useRef(handle);
-  handleRef.current = handle;
+  useEffect(() => {
+    handleRef.current = handle;
+  }, [handle]);
   const typingClearTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined
   );
   const lastTypingSent = useRef(0);
-  // Unique key per tab so multiple open tabs each register as a distinct peer.
-  const presenceKey = useRef<string>(
-    globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
-  );
 
   useEffect(() => {
     if (!isSupabaseConfigured || !roomId) return;
 
     const supabase = getSupabaseClient();
+    // Unique key per tab so multiple open tabs each register as a distinct peer.
+    const presenceKey =
+      globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
     const channel = supabase.channel(`room:${roomId}`, {
       config: {
         broadcast: { self: false }, // own messages added optimistically
-        presence: { key: presenceKey.current },
+        presence: { key: presenceKey },
       },
     });
     channelRef.current = channel;

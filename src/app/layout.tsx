@@ -44,6 +44,12 @@ export const metadata: Metadata = {
       "Play games, meet coworkers, and survive boring work hours together.",
     type: "website",
   },
+  // Disable browser auto-translation. It rewrites DOM text nodes out from
+  // under React, which crashes live/interactive views (games, chat, presence)
+  // with "insertBefore ... not a child of this node". The app UI is English.
+  other: {
+    google: "notranslate",
+  },
 };
 
 export const viewport: Viewport = {
@@ -59,6 +65,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      translate="no"
       className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >

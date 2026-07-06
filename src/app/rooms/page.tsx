@@ -40,6 +40,7 @@ function CreateRoomDialog() {
     const room: Room = {
       id: `custom-${Date.now()}`,
       title: clean,
+      gameId: game.id,
       gameName: game.name,
       gameEmoji: game.emoji,
       host: "You",
