@@ -11,9 +11,17 @@ Migrations live in `migrations/`. Run them **in order** in the Supabase Dashboar
 5. New query → paste `migrations/0003_connect_four.sql` → **Run**
 6. New query → paste `migrations/0004_room_game_id.sql` → **Run**
 7. New query → paste `migrations/0005_room_phase4.sql` → **Run**
+8. New query → paste `migrations/0006_room_reconcile_host.sql` → **Run**
+9. New query → paste `migrations/0007_room_indexes.sql` → **Run**
+10. New query → paste `migrations/0008_room_rls_hardening.sql` → **Run**
 
 Each migration is idempotent (`if not exists` / `create or replace`), so
 re-running one is a safe no-op if you're unsure whether it already applied.
+
+> **Fresh setup?** [`../supabase/schema.sql`](schema.sql) is a consolidated
+> snapshot of the full schema (all migrations folded in) — run it once on an
+> empty project instead of the numbered files. The numbered `migrations/` stay
+> the source of truth and history.
 
 ### After running the migration
 
@@ -61,6 +69,29 @@ write the count directly):
 Invite codes are unique (partial index on non-empty codes) and are **never**
 included in the public room list query — they reach a client only via
 `room_by_invite` (an explicit code lookup) or the creator's own session.
+
+### Occupancy reconciliation + host controls (`0006`)
+
+`current_count` is maintained optimistically by join/leave, so it **drifts up**
+when a client disconnects without leaving cleanly (crash, closed laptop, dropped
+network). Presence knows who is actually connected, so the room's *leader*
+client (lowest presence key) periodically pushes the true count back:
+
+| Function | Does |
+|---|---|
+| `room_sync_count(p_slug, p_count)` | Reconciles `current_count` to the live presence count (clamped `0..capacity`); a no-op when unchanged, so it's cheap to call on every presence change |
+| `room_close(p_slug)` | **Host-only** — sets status `closed`. Returns `{"ok":true}` or `{"error":"not_found"\|"forbidden"}` |
+
+`0006` also adds `host_id uuid default auth.uid()` so the creator is identified
+by their **stable** anonymous auth id rather than the re-randomised
+`host_handle`. Host controls key off `auth.uid() = host_id`:
+
+- **Close room** — enforced server-side by `room_close`; closed rooms drop out
+  of the list (`getRooms` filters `status <> 'closed'`) and a `room_closed`
+  broadcast navigates present clients away.
+- **Kick** — advisory: the host broadcasts a `kick` targeting a specific
+  **presence key**, and that tab removes itself. (Presence has no per-peer
+  server enforcement, so this relies on the client cooperating.)
 
 ### Adding a game
 

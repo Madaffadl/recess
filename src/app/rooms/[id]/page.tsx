@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Check, Copy, Globe, Lock, Users } from "lucide-react";
+import { ArrowLeft, Check, Copy, Globe, Lock, UserMinus, Users, X } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 
 import { PageShell } from "@/components/page-shell";
@@ -20,7 +20,7 @@ import { ChatComposer } from "@/components/chat-composer";
 import { getGameModule } from "@/games/registry";
 import { GameComingSoon } from "@/games/game-coming-soon";
 import { randomHandle } from "@/lib/data";
-import { joinRoom, leaveRoom, getRoomByInviteCode } from "@/lib/api/rooms";
+import { joinRoom, leaveRoom, closeRoom, getRoomByInviteCode } from "@/lib/api/rooms";
 import { useRoom } from "@/hooks/use-room";
 import { useRooms } from "../rooms-context";
 
@@ -155,8 +155,9 @@ export default function RoomDetailPage() {
           : false;
 
   const {
-    messages, presentHandles, onlineCount, typingUser,
-    connected, activity, sendMessage, notifyTyping,
+    messages, presentHandles, presentPeers, onlineCount, typingUser,
+    connected, activity, selfKey, selfUid, removed,
+    sendMessage, notifyTyping, kick, closeForAll,
   } = useRoom({ roomId: params.id, handle: identity, seed: [] });
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -234,6 +235,29 @@ export default function RoomDetailPage() {
     return <PrivateRoomGate roomId={params.id} onAccess={() => setManualGrant(true)} />;
   }
 
+  // ── Removed by host (kick / close) ──
+  if (removed) {
+    return (
+      <PageShell>
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-24 text-center">
+          <p className="font-display text-xl font-semibold">
+            {removed === "kicked"
+              ? "You were removed from this room"
+              : "This room was closed by the host"}
+          </p>
+          <p className="mt-2 text-sm text-muted">
+            {removed === "kicked"
+              ? "The host removed you from the room."
+              : "The host ended the session."}
+          </p>
+          <Button asChild variant="secondary" className="mt-6">
+            <Link href="/rooms"><ArrowLeft />Back to rooms</Link>
+          </Button>
+        </div>
+      </PageShell>
+    );
+  }
+
   // ── Room full / expired ──
   if (joinError) {
     return (
@@ -248,13 +272,24 @@ export default function RoomDetailPage() {
     );
   }
 
+  const isHost = !!selfUid && selfUid === room.hostId;
   const joined = connected && presentHandles.includes(identity);
   const gameModule = getGameModule(room.gameId);
-  const displayParticipants = connected && presentHandles.length > 0
-    ? presentHandles
-    : [identity];
+  // One row per live connection (with a key for kicking); fall back to self
+  // before presence has synced.
+  const displayPeers =
+    connected && presentPeers.length > 0
+      ? presentPeers
+      : [{ key: selfKey ?? "self", handle: identity, uid: selfUid ?? undefined }];
   const participantCount = connected ? onlineCount : 1;
   const grouped = annotateGroups(messages);
+
+  const handleCloseRoom = async () => {
+    // Tell everyone present immediately, then persist the closed status.
+    closeForAll();
+    await closeRoom(params.id);
+    router.push("/rooms");
+  };
 
   // Invite code: only meaningful for private rooms. Prefer the validated URL
   // param, then the code held in the creator's own session context.
@@ -307,6 +342,17 @@ export default function RoomDetailPage() {
           {/* Share invite link — visible when we have a code */}
           {inviteCode && (
             <InviteCopyButton code={inviteCode} />
+          )}
+          {/* Host-only: close the room for everyone */}
+          {isHost && (
+            <Button
+              variant="ghost"
+              className="text-red-400 hover:text-red-300"
+              onClick={handleCloseRoom}
+            >
+              <X className="size-4" />
+              Close room
+            </Button>
           )}
           {/* Leave button — navigates away; presence unsubscribes on unmount */}
           <Button
@@ -372,17 +418,32 @@ export default function RoomDetailPage() {
             </span>
           </div>
           <ul className="mt-4 space-y-3">
-            {displayParticipants.map((p) => (
-              <li key={p} className="flex items-center gap-3">
-                <UserAvatar name={p} className="size-8" />
-                <span className="flex-1 truncate text-sm">
-                  {p === identity ? (
-                    <span>{p} <span className="text-xs text-muted">(you)</span></span>
-                  ) : p}
-                </span>
-                {p === room.host && <Badge variant="primary">host</Badge>}
-              </li>
-            ))}
+            {displayPeers.map((peer) => {
+              const isSelf = peer.key === selfKey;
+              const peerIsHost = !!peer.uid && peer.uid === room.hostId;
+              return (
+                <li key={peer.key} className="flex items-center gap-3">
+                  <UserAvatar name={peer.handle} className="size-8" />
+                  <span className="flex-1 truncate text-sm">
+                    {isSelf ? (
+                      <span>{peer.handle} <span className="text-xs text-muted">(you)</span></span>
+                    ) : peer.handle}
+                  </span>
+                  {peerIsHost && <Badge variant="primary">host</Badge>}
+                  {/* Host-only: remove another participant */}
+                  {isHost && !isSelf && (
+                    <button
+                      type="button"
+                      aria-label={`Remove ${peer.handle}`}
+                      onClick={() => kick(peer.key)}
+                      className="grid size-7 shrink-0 place-items-center rounded-lg border border-border text-subtle transition-colors hover:border-red-500/40 hover:text-red-400"
+                    >
+                      <UserMinus className="size-3.5" />
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
 
           {/* Invite code block for host or anyone with the code */}

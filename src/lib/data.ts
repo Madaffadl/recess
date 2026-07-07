@@ -151,7 +151,7 @@ export const RECENTLY_PLAYED = [
 /*  Rooms — the main place coworkers interact                         */
 /* ------------------------------------------------------------------ */
 
-export type RoomStatus = "live" | "filling up" | "open";
+export type RoomStatus = "live" | "filling up" | "open" | "closed";
 
 export type Room = {
   id: string;
@@ -170,6 +170,8 @@ export type Room = {
   inviteCode?: string;
   /** Live occupancy from DB. Falls back to participants.length for mock rooms. */
   currentCount?: number;
+  /** Stable auth id of the room's creator; drives host-only controls. */
+  hostId?: string;
 };
 
 export const ROOMS: Room[] = [

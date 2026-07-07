@@ -17,6 +17,7 @@ type DbRoom = {
   game_name: string;
   game_emoji: string;
   host_handle: string;
+  host_id: string | null;
   capacity: number;
   visibility: string;
   category: string;
@@ -28,12 +29,12 @@ type DbRoom = {
 // Full column set — includes invite_code. Only used where the caller is
 // entitled to the code (room creation, invite-code RPC lookup).
 const DB_COLUMNS =
-  "slug, title, game_id, game_name, game_emoji, host_handle, capacity, visibility, category, status, invite_code, current_count";
+  "slug, title, game_id, game_name, game_emoji, host_handle, host_id, capacity, visibility, category, status, invite_code, current_count";
 
 // List column set — deliberately omits invite_code so the public room list
 // never ships private invite codes to every visitor's browser.
 const LIST_COLUMNS =
-  "slug, title, game_id, game_name, game_emoji, host_handle, capacity, visibility, category, status, current_count";
+  "slug, title, game_id, game_name, game_emoji, host_handle, host_id, capacity, visibility, category, status, current_count";
 
 function toRoom(row: DbRoom): Room {
   return {
@@ -50,6 +51,7 @@ function toRoom(row: DbRoom): Room {
     status: row.status as RoomStatus,
     inviteCode: row.invite_code || undefined,
     currentCount: row.current_count,
+    hostId: row.host_id ?? undefined,
   };
 }
 
@@ -76,6 +78,7 @@ export async function getRooms(): Promise<Room[]> {
     .from("room")
     .select(LIST_COLUMNS)
     .gt("expires_at", new Date().toISOString())
+    .neq("status", "closed")
     .order("created_at", { ascending: false });
   if (error || !data) return ROOMS;
   return (data as DbRoom[]).map(toRoom);
@@ -174,4 +177,26 @@ export async function joinRoom(slug: string): Promise<JoinError | null> {
 export async function leaveRoom(slug: string): Promise<void> {
   if (!isSupabaseConfigured) return;
   await getSupabaseClient().rpc("room_leave", { p_slug: slug });
+}
+
+/**
+ * Reconcile the DB occupancy to the true presence count. Idempotent and
+ * cheap (a no-op server-side when unchanged) — safe to call on every
+ * presence change from the room's leader client.
+ */
+export async function syncRoomCount(slug: string, count: number): Promise<void> {
+  if (!isSupabaseConfigured) return;
+  await getSupabaseClient().rpc("room_sync_count", { p_slug: slug, p_count: count });
+}
+
+/** Host-only: retire a room. Returns null on success, error string otherwise. */
+export async function closeRoom(
+  slug: string
+): Promise<"forbidden" | "not_found" | "error" | null> {
+  if (!isSupabaseConfigured) return null;
+  const { data, error } = await getSupabaseClient().rpc("room_close", { p_slug: slug });
+  if (error) return "error";
+  const result = data as { ok?: boolean; error?: string };
+  if (result?.error) return result.error as "forbidden" | "not_found";
+  return null;
 }
