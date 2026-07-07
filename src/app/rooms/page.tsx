@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Plus, SearchX } from "lucide-react";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Hash, Plus, SearchX } from "lucide-react";
 
 import { PageHeader, PageShell } from "@/components/page-shell";
 import { RoomCard } from "@/components/room-card";
@@ -20,9 +20,78 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { GAMES, GAME_CATEGORIES, type Room } from "@/lib/data";
+import { GAMES, GAME_CATEGORIES, randomHandle } from "@/lib/data";
 import { cn } from "@/lib/utils";
+import { createRoom, getRoomByInviteCode } from "@/lib/api/rooms";
 import { useRooms } from "./rooms-context";
+
+function JoinByCodeDialog() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
+
+  const join = async () => {
+    const clean = code.trim().toUpperCase();
+    if (!clean || joining) return;
+    setJoining(true);
+    setError(null);
+    try {
+      const room = await getRoomByInviteCode(clean);
+      if (!room) {
+        setError("Invalid or expired invite code.");
+        return;
+      }
+      setOpen(false);
+      setCode("");
+      router.push(`/rooms/${room.id}?invite=${clean}`);
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setCode(""); setError(null); } }}>
+      <DialogTrigger asChild>
+        <Button variant="secondary">
+          <Hash />
+          Join by code
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Join with invite code</DialogTitle>
+          <DialogDescription>
+            Enter the code shared by your teammate to join their room.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="invite-code">Invite code</Label>
+          <Input
+            id="invite-code"
+            value={code}
+            onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null); }}
+            onKeyDown={(e) => e.key === "Enter" && join()}
+            placeholder="e.g. A3BX9YZK"
+            className="font-mono tracking-widest"
+            maxLength={16}
+            autoFocus
+          />
+          {error && <p className="text-sm text-red-400">{error}</p>}
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="ghost">Cancel</Button>
+          </DialogClose>
+          <Button onClick={join} disabled={!code.trim() || joining}>
+            {joining ? "Looking up…" : "Join room"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function CreateRoomDialog() {
   const { addRoom } = useRooms();
@@ -32,28 +101,32 @@ function CreateRoomDialog() {
   const [gameId, setGameId] = useState(GAMES[0].id);
   const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [capacity, setCapacity] = useState(8);
+  const [creating, setCreating] = useState(false);
+  const [host] = useState<string>(() => randomHandle());
 
-  const create = () => {
+  const create = async () => {
     const clean = title.trim();
-    if (!clean) return;
+    if (!clean || creating) return;
     const game = GAMES.find((g) => g.id === gameId) ?? GAMES[0];
-    const room: Room = {
-      id: `custom-${Date.now()}`,
-      title: clean,
-      gameId: game.id,
-      gameName: game.name,
-      gameEmoji: game.emoji,
-      host: "You",
-      participants: ["You"],
-      capacity,
-      visibility,
-      category: game.category,
-      status: "open",
-    };
-    addRoom(room);
-    setOpen(false);
-    setTitle("");
-    router.push(`/rooms/${room.id}`);
+    setCreating(true);
+    try {
+      const room = await createRoom({
+        title: clean,
+        gameId: game.id,
+        gameName: game.name,
+        gameEmoji: game.emoji,
+        host,
+        capacity,
+        visibility,
+        category: game.category,
+      });
+      addRoom(room);
+      setOpen(false);
+      setTitle("");
+      router.push(`/rooms/${room.id}`);
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
@@ -143,8 +216,8 @@ function CreateRoomDialog() {
           <DialogClose asChild>
             <Button variant="ghost">Cancel</Button>
           </DialogClose>
-          <Button onClick={create} disabled={!title.trim()}>
-            Create room
+          <Button onClick={create} disabled={!title.trim() || creating}>
+            {creating ? "Creating…" : "Create room"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -152,11 +225,23 @@ function CreateRoomDialog() {
   );
 }
 
-export default function RoomsPage() {
+function RoomsPageContent() {
   const { rooms } = useRooms();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [visibility, setVisibility] = useState("all");
   const [category, setCategory] = useState("All");
+
+  // Pre-filter by game when arriving from a GameCard link. Sync the category
+  // chip during render (React's "adjust state from a previous value" pattern)
+  // rather than in an effect, so it doesn't trigger a cascading re-render.
+  const gameFilter = searchParams.get("game");
+  const [syncedGame, setSyncedGame] = useState<string | null>(null);
+  if (gameFilter !== syncedGame) {
+    setSyncedGame(gameFilter);
+    const game = gameFilter ? GAMES.find((g) => g.id === gameFilter) : undefined;
+    if (game) setCategory(game.category);
+  }
 
   const q = query.trim().toLowerCase();
   const filtered = useMemo(
@@ -165,11 +250,12 @@ export default function RoomsPage() {
         (r) =>
           (visibility === "all" || r.visibility === visibility) &&
           (category === "All" || r.category === category) &&
+          (!gameFilter || r.gameId === gameFilter) &&
           (q === "" ||
             r.title.toLowerCase().includes(q) ||
             r.gameName.toLowerCase().includes(q))
       ),
-    [rooms, q, visibility, category]
+    [rooms, q, visibility, category, gameFilter]
   );
 
   return (
@@ -178,7 +264,12 @@ export default function RoomsPage() {
         eyebrow="rooms"
         title="Where coworkers hang out"
         description="The main place to meet on Recess — hop into a public room, spin up a private one for your team, and play together."
-        actions={<CreateRoomDialog />}
+        actions={
+          <div className="flex gap-2">
+            <JoinByCodeDialog />
+            <CreateRoomDialog />
+          </div>
+        }
       />
 
       {/* Filters */}
@@ -240,5 +331,25 @@ export default function RoomsPage() {
         )}
       </div>
     </PageShell>
+  );
+}
+
+// useSearchParams() requires a Suspense boundary so the static shell can be
+// prerendered while the query-string-dependent content renders on the client.
+export default function RoomsPage() {
+  return (
+    <Suspense
+      fallback={
+        <PageShell>
+          <PageHeader
+            eyebrow="rooms"
+            title="Where coworkers hang out"
+            description="The main place to meet on Recess — hop into a public room, spin up a private one for your team, and play together."
+          />
+        </PageShell>
+      }
+    >
+      <RoomsPageContent />
+    </Suspense>
   );
 }

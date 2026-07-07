@@ -9,6 +9,11 @@ Migrations live in `migrations/`. Run them **in order** in the Supabase Dashboar
 3. Paste `migrations/0001_initial.sql` → **Run**
 4. New query → paste `migrations/0002_game_core.sql` → **Run**
 5. New query → paste `migrations/0003_connect_four.sql` → **Run**
+6. New query → paste `migrations/0004_room_game_id.sql` → **Run**
+7. New query → paste `migrations/0005_room_phase4.sql` → **Run**
+
+Each migration is idempotent (`if not exists` / `create or replace`), so
+re-running one is a safe no-op if you're unsure whether it already applied.
 
 ### After running the migration
 
@@ -41,6 +46,22 @@ in `0002_game_core.sql`:
 Each function checks `auth.uid()` against the seated player, so a client cannot
 move out of turn, play an illegal move, or forge an opponent's move.
 
+## Room system (Phase 4)
+
+`room` gains `invite_code` and `current_count` in `0005_room_phase4.sql`, plus
+`SECURITY DEFINER` RPCs so occupancy is maintained server-side (clients never
+write the count directly):
+
+| Function | Does |
+|---|---|
+| `room_join(p_slug)` | Race-safe join — `FOR UPDATE` row lock, capacity check, increments `current_count`. Returns `{"ok":true}` or `{"error":"not_found"\|"expired"\|"full"}` |
+| `room_leave(p_slug)` | Decrements occupancy (floored at 0) and reopens status when it drops below capacity |
+| `room_by_invite(p_code)` | Case-insensitive invite-code lookup; only returns a non-expired room |
+
+Invite codes are unique (partial index on non-empty codes) and are **never**
+included in the public room list query — they reach a client only via
+`room_by_invite` (an explicit code lookup) or the creator's own session.
+
 ### Adding a game
 
 The core RPCs dispatch by `game_id` to two per-game functions:
@@ -59,6 +80,6 @@ See `0003_connect_four.sql` as the reference.
 ## Ephemeral vs persistent
 
 - **Chat messages** — ephemeral (Broadcast only, never written to DB). Cheap, low-latency, zero storage.
-- **Room presence** — ephemeral (Supabase Presence). Tracks who is online right now.
-- **Room records** — Milestone A uses in-memory context (`lib/api/rooms.ts` mock). Phase 4 swaps to this table.
+- **Room presence** — ephemeral (Supabase Presence). Tracks who is online right now, and drives the per-room participant list + activity feed.
+- **Room records** — persistent in the `room` table; the list stays live via Postgres Changes (INSERT/UPDATE). When Supabase isn't configured, `lib/api/rooms.ts` falls back to in-memory mock data.
 - **Game state** — Postgres JSONB + Realtime Changes. Phase 3.

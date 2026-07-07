@@ -54,43 +54,66 @@ export function useLounge({
     undefined
   );
   const lastTypingSent = useRef(0);
+  const reconnectAttempt = useRef(0);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
     const supabase = getSupabaseClient();
-    const channel = supabase.channel(LOUNGE_CHANNEL, {
-      config: {
-        broadcast: { self: false }, // we add our own messages optimistically
-      },
-    });
-    channelRef.current = channel;
 
-    channel
-      .on("broadcast", { event: "message" }, ({ payload }) => {
-        const msg = payload as ChatMessage;
-        setMessages((prev) =>
-          [...prev, { ...msg, self: false }].slice(-MAX_MESSAGES)
-        );
-      })
-      .on("broadcast", { event: "typing" }, ({ payload }) => {
-        const who = (payload as { user?: string }).user;
-        if (!who || who === handleRef.current) return;
-        setTypingUser(who);
-        clearTimeout(typingClearTimer.current);
-        typingClearTimer.current = setTimeout(
-          () => setTypingUser(null),
-          TYPING_CLEAR_MS
-        );
-      })
-      .subscribe((status) => {
-        setConnected(status === "SUBSCRIBED");
+    function connect() {
+      const channel = supabase.channel(LOUNGE_CHANNEL, {
+        config: {
+          broadcast: { self: false }, // we add our own messages optimistically
+        },
       });
+      channelRef.current = channel;
+
+      channel
+        .on("broadcast", { event: "message" }, ({ payload }) => {
+          const msg = payload as ChatMessage;
+          setMessages((prev) =>
+            [...prev, { ...msg, self: false }].slice(-MAX_MESSAGES)
+          );
+        })
+        .on("broadcast", { event: "typing" }, ({ payload }) => {
+          const who = (payload as { user?: string }).user;
+          if (!who || who === handleRef.current) return;
+          setTypingUser(who);
+          clearTimeout(typingClearTimer.current);
+          typingClearTimer.current = setTimeout(
+            () => setTypingUser(null),
+            TYPING_CLEAR_MS
+          );
+        })
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            reconnectAttempt.current = 0;
+            setConnected(true);
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            setConnected(false);
+            channelRef.current = null;
+            supabase.removeChannel(channel);
+            const delay = Math.min(1_000 * 2 ** reconnectAttempt.current, 30_000);
+            reconnectAttempt.current += 1;
+            reconnectTimer.current = setTimeout(connect, delay);
+          } else {
+            setConnected(false);
+          }
+        });
+    }
+
+    connect();
 
     return () => {
+      clearTimeout(reconnectTimer.current);
       clearTimeout(typingClearTimer.current);
+      const ch = channelRef.current;
       channelRef.current = null;
-      supabase.removeChannel(channel);
+      if (ch) supabase.removeChannel(ch);
     };
   }, []);
 
