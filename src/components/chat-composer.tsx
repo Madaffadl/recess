@@ -18,10 +18,12 @@ export function ChatComposer({
   onSend,
   onTyping,
   placeholder = "Message the lounge…",
+  disabled = false,
 }: {
   onSend: (text: string) => void;
   onTyping?: () => void;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   const [value, setValue] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -35,6 +37,7 @@ export function ChatComposer({
   };
 
   const setText = (v: string) => {
+    if (disabled) return;
     const next = v.slice(0, MAX);
     setValue(next);
     if (next.trim()) onTyping?.();
@@ -43,7 +46,7 @@ export function ChatComposer({
 
   const submit = () => {
     const text = value.trim();
-    if (!text) return;
+    if (!text || disabled) return;
     onSend(text);
     setValue("");
     setEmojiOpen(false);
@@ -109,8 +112,9 @@ export function ChatComposer({
           value={value}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={placeholder}
-          className="no-scrollbar max-h-[120px] min-h-9 flex-1 resize-none rounded-xl border border-border bg-white/[0.02] px-3.5 py-2 text-sm leading-relaxed text-foreground outline-none placeholder:text-subtle focus-visible:border-primary/50 focus-visible:bg-white/[0.04]"
+          placeholder={disabled ? "Reconnecting…" : placeholder}
+          disabled={disabled}
+          className="no-scrollbar max-h-[120px] min-h-9 flex-1 resize-none rounded-xl border border-border bg-white/[0.02] px-3.5 py-2 text-sm leading-relaxed text-foreground outline-none placeholder:text-subtle focus-visible:border-primary/50 focus-visible:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-60"
         />
 
         <Button
@@ -118,7 +122,7 @@ export function ChatComposer({
           size="icon"
           aria-label="Send"
           onClick={submit}
-          disabled={!value.trim()}
+          disabled={!value.trim() || disabled}
           className="size-9 shrink-0"
         >
           <Send className="size-4" />

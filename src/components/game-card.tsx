@@ -1,8 +1,13 @@
+import Link from "next/link";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { isPlayable } from "@/games/registry";
 import type { Game } from "@/lib/data";
 
 export function GameCard({ game }: { game: Game }) {
+  const playable = isPlayable(game.id);
+
   return (
     <div className="group flex flex-col rounded-2xl border border-border bg-card p-5 transition-colors hover:border-border-strong">
       <div className="flex items-start gap-3.5">
@@ -26,9 +31,15 @@ export function GameCard({ game }: { game: Game }) {
         {game.blurb}
       </p>
 
-      <Button variant="secondary" size="sm" className="mt-4 w-full">
-        Play
-      </Button>
+      {playable ? (
+        <Button asChild variant="secondary" size="sm" className="mt-4 w-full">
+          <Link href={`/rooms?game=${game.id}`}>Play</Link>
+        </Button>
+      ) : (
+        <Button variant="secondary" size="sm" className="mt-4 w-full" disabled>
+          Coming soon
+        </Button>
+      )}
     </div>
   );
 }

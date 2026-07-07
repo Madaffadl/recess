@@ -24,8 +24,8 @@ through typography, not stickers.
 | ---------------- | ----------------------------------------------------------------------- |
 | `/`              | Hero, a single clean dashboard preview, and the **Anonymous Lounge**    |
 | `/discover`      | Browse games — search, category filters, popular / new / recently played |
-| `/rooms`         | The main hangout — create, filter (public/private + category), and join rooms |
-| `/rooms/[id]`    | Room detail — participants, live chat, and activity feed                |
+| `/rooms`         | The main hangout — create, join by invite code, filter (public/private + category), and join rooms |
+| `/rooms/[id]`    | Room detail — live game board, real-time chat, presence-driven participants, private invite gate, and activity feed |
 | `/about`         | Story, mission, why it exists, FAQ, and a contact form                  |
 
 Recess is built around three pillars — **Games, Rooms, and Anonymous Chat**.
@@ -35,8 +35,7 @@ Rooms are the main place coworkers interact.
 / Slack feel) — left/right bubbles, consecutive-message grouping, a live typing
 indicator, subtle timestamps, an online count, and a composer with an emoji
 picker, enter-to-send, an auto-growing textarea, and a character limit. The same
-chat powers each room. Everything is interactive; game engines and auth are
-intentionally mocked.
+chat powers each room.
 
 ## 🧱 Tech stack
 
@@ -46,6 +45,8 @@ intentionally mocked.
 - shadcn/ui-style components (Radix primitives: dialog, accordion, tabs, …)
 - [Motion](https://motion.dev) (Framer Motion) for restrained animation
 - [lucide-react](https://lucide.dev) icons
+- [Supabase](https://supabase.com) — Postgres, Realtime (Broadcast + Presence +
+  Postgres Changes), and anonymous Auth
 
 ## 🎨 Palette
 
@@ -66,7 +67,50 @@ npm run dev      # http://localhost:3000
 
 npm run build    # production build
 npm start        # serve the production build
+npm run lint     # eslint
 ```
+
+### Supabase (optional but recommended)
+
+Rooms, live game state, presence, and realtime chat are backed by Supabase.
+**Without it the app still runs** — it gracefully falls back to in-memory mock
+rooms (guarded by `isSupabaseConfigured`) — but rooms won't persist and counts
+won't be live across clients.
+
+1. Create a Supabase project.
+2. Copy `.env.example` → `.env.local` and fill in the two public values from
+   **Project Settings → API**:
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-public-key>
+   ```
+   Both are public (anon key) and safe in the browser — the database is
+   protected by Row Level Security.
+3. Run the migrations in order via the Dashboard **SQL Editor**
+   (`supabase/migrations/0001…0005`). See [`supabase/README.md`](supabase/README.md).
+4. Enable Realtime for the `room` and `game_session` tables under
+   **Database → Replication**.
+
+## 🌐 Backend architecture
+
+The frontend degrades gracefully: every backend call is guarded so the UI works
+with or without Supabase configured.
+
+- **Chat & typing** — ephemeral **Broadcast** (never written to the DB).
+- **Online count & participants** — ephemeral **Presence** (per-room and lounge).
+- **Rooms** — persistent Postgres rows; the list stays live via **Postgres
+  Changes** (INSERT for new rooms, UPDATE for occupancy/status).
+- **Joins** — race-safe `SECURITY DEFINER` RPC (`room_join`) using a `FOR UPDATE`
+  row lock for capacity checks; `room_leave` decrements occupancy.
+- **Private rooms** — 8-char invite codes (`room_by_invite` RPC); the code is
+  never shipped in the public room list, only to the creator's session or a
+  validated `?invite=` link.
+- **Games** — server-authoritative state via generic `SECURITY DEFINER` RPCs
+  (`game_join` / `game_move` / `game_rematch`); the board syncs over Realtime.
+  Adding a game = one migration + one client module registered in
+  `src/games/registry.ts`.
+- **Auth** — anonymous Supabase sessions; realtime channels reconnect with
+  exponential backoff.
 
 ## 🗂 Structure
 
@@ -87,9 +131,26 @@ src/
 │   ├── chat-message.tsx · chat-composer.tsx  # messenger-style chat pieces
 │   ├── game-card.tsx · room-card.tsx · page-shell.tsx · logo.tsx …
 │   └── ui/                   # shadcn/ui base components
-├── hooks/use-count-up.ts
-└── lib/{data.ts, utils.ts}   # mock data + cn()
+├── games/                    # pluggable game engines
+│   ├── registry.ts           # game_id → client module
+│   ├── use-game-session.ts   # realtime board state hook
+│   └── connect-four/         # reference game (board · logic)
+├── hooks/
+│   ├── use-lounge.ts         # lounge chat channel (Broadcast + backoff)
+│   ├── use-room.ts           # per-room chat, presence, activity
+│   ├── use-online-count.ts   # Presence-based online count
+│   └── use-count-up.ts
+└── lib/
+    ├── data.ts               # static seed data + helpers
+    ├── utils.ts              # cn()
+    ├── api/                  # rooms + anonymous session (Supabase)
+    └── supabase/client.ts    # browser client + isSupabaseConfigured
+
+supabase/
+├── migrations/               # 0001…0005 — run in order (SQL Editor)
+└── README.md                 # schema + RPC reference
 ```
 
-> All content is mock/client-side data — the chat, counters, and rooms are
-> functional simulations, with no backend required.
+> With Supabase configured, rooms, game state, presence, and chat are backed by
+> a real Postgres + Realtime backend. Without it, the app falls back to
+> in-memory mock data so the UI stays fully explorable with no backend required.

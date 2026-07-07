@@ -166,6 +166,10 @@ export type Room = {
   visibility: "public" | "private";
   category: Exclude<GameCategory, "All">;
   status: RoomStatus;
+  /** Shareable invite code. Present on DB rooms; absent on mock rooms. */
+  inviteCode?: string;
+  /** Live occupancy from DB. Falls back to participants.length for mock rooms. */
+  currentCount?: number;
 };
 
 export const ROOMS: Room[] = [
@@ -432,6 +436,11 @@ export const CHAT_USERS = [
   "InboxZero",
   "QuietQuitter",
 ];
+
+/** Pick a random display handle from the CHAT_USERS pool. */
+export function randomHandle(): string {
+  return CHAT_USERS[Math.floor(Math.random() * CHAT_USERS.length)];
+}
 
 export const CHAT_LINES = [
   "anyone up for a quick round?",

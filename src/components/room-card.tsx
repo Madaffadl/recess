@@ -20,8 +20,10 @@ function StatusDot({ status }: { status: Room["status"] }) {
 }
 
 export function RoomCard({ room }: { room: Room }) {
+  // Prefer live DB count; fall back to static participants array for mock rooms.
+  const liveCount = room.currentCount ?? room.participants.length;
   const shown = room.participants.slice(0, 4);
-  const extra = room.participants.length - shown.length;
+  const extra = liveCount - shown.length;
 
   return (
     <div className="group flex flex-col rounded-2xl border border-border bg-card p-5 transition-colors hover:border-border-strong">
@@ -48,24 +50,29 @@ export function RoomCard({ room }: { room: Room }) {
         </div>
       </div>
 
-      {/* Active users · Join */}
+      {/* Active users · capacity · Join */}
       <div className="mt-5 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex -space-x-2">
-            {shown.map((p) => (
-              <UserAvatar key={p} name={p} className="size-7 ring-2 ring-card" />
-            ))}
-            {extra > 0 && (
-              <span className="grid size-7 place-items-center rounded-lg border border-border bg-elevated text-[10px] font-medium text-muted ring-2 ring-card">
-                +{extra}
-              </span>
-            )}
-          </div>
+          {shown.length > 0 ? (
+            <div className="flex -space-x-2">
+              {shown.map((p) => (
+                <UserAvatar key={p} name={p} className="size-7 ring-2 ring-card" />
+              ))}
+              {extra > 0 && (
+                <span className="grid size-7 place-items-center rounded-lg border border-border bg-elevated text-[10px] font-medium text-muted ring-2 ring-card">
+                  +{extra}
+                </span>
+              )}
+            </div>
+          ) : (
+            // DB room — show numeric count only (no handle list in DB)
+            <span className="flex size-7 items-center justify-center rounded-lg border border-border bg-elevated text-[11px] font-semibold text-muted">
+              {liveCount}
+            </span>
+          )}
           <span className="text-xs text-muted">
-            <span className="font-semibold text-foreground">
-              {room.participants.length}
-            </span>{" "}
-            active
+            <span className="font-semibold text-foreground">{liveCount}</span>/
+            {room.capacity}
           </span>
         </div>
 
