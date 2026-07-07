@@ -45,9 +45,9 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
         ({ new: row }) => {
           const r = row as {
             slug: string; title: string; game_id: string; game_name: string;
-            game_emoji: string; host_handle: string; capacity: number;
-            visibility: string; category: string; status: string;
-            current_count: number;
+            game_emoji: string; host_handle: string; host_id: string | null;
+            capacity: number; visibility: string; category: string;
+            status: string; current_count: number;
           };
           // Note: invite_code is intentionally NOT read here — the realtime
           // feed reaches every connected client, so codes must not ride along.
@@ -60,6 +60,7 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
             category: r.category as Exclude<GameCategory, "All">,
             status: r.status as RoomStatus,
             currentCount: r.current_count,
+            hostId: r.host_id ?? undefined,
           };
           setRooms((prev) =>
             prev.some((x) => x.id === newRoom.id) ? prev : [newRoom, ...prev]
@@ -72,13 +73,15 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
         { event: "UPDATE", schema: "public", table: "room" },
         ({ new: row }) => {
           const r = row as { slug: string; current_count: number; status: string };
-          setRooms((prev) =>
-            prev.map((room) =>
+          setRooms((prev) => {
+            // A closed room drops out of the list entirely.
+            if (r.status === "closed") return prev.filter((room) => room.id !== r.slug);
+            return prev.map((room) =>
               room.id === r.slug
                 ? { ...room, currentCount: r.current_count, status: r.status as RoomStatus }
                 : room
-            )
-          );
+            );
+          });
         }
       )
       .subscribe();

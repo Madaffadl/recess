@@ -87,7 +87,8 @@ won't be live across clients.
    Both are public (anon key) and safe in the browser — the database is
    protected by Row Level Security.
 3. Run the migrations in order via the Dashboard **SQL Editor**
-   (`supabase/migrations/0001…0005`). See [`supabase/README.md`](supabase/README.md).
+   (`supabase/migrations/0001…0008`, or run the consolidated
+   `supabase/schema.sql` once). See [`supabase/README.md`](supabase/README.md).
 4. Enable Realtime for the `room` and `game_session` tables under
    **Database → Replication**.
 
@@ -102,9 +103,15 @@ with or without Supabase configured.
   Changes** (INSERT for new rooms, UPDATE for occupancy/status).
 - **Joins** — race-safe `SECURITY DEFINER` RPC (`room_join`) using a `FOR UPDATE`
   row lock for capacity checks; `room_leave` decrements occupancy.
+- **Self-healing occupancy** — the count would drift up when clients crash, so
+  the room's *leader* client reconciles `current_count` to the true presence
+  count (`room_sync_count`), correcting the drift.
 - **Private rooms** — 8-char invite codes (`room_by_invite` RPC); the code is
   never shipped in the public room list, only to the creator's session or a
   validated `?invite=` link.
+- **Host controls** — the creator is pinned by `host_id` (stable auth id, not
+  the display handle). The host can **close** the room (enforced by `room_close`,
+  keyed on `auth.uid()`) or **kick** a participant (advisory presence broadcast).
 - **Games** — server-authoritative state via generic `SECURITY DEFINER` RPCs
   (`game_join` / `game_move` / `game_rematch`); the board syncs over Realtime.
   Adding a game = one migration + one client module registered in
@@ -147,7 +154,8 @@ src/
     └── supabase/client.ts    # browser client + isSupabaseConfigured
 
 supabase/
-├── migrations/               # 0001…0005 — run in order (SQL Editor)
+├── migrations/               # 0001…0008 — run in order (SQL Editor)
+├── schema.sql                # consolidated snapshot (fresh-setup baseline)
 └── README.md                 # schema + RPC reference
 ```
 
