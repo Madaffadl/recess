@@ -9,6 +9,7 @@ import {
   HelpCircle,
   Keyboard,
   CircleDot,
+  Worm,
   type LucideIcon,
 } from "lucide-react";
 
@@ -49,6 +50,16 @@ export const GAMES: Game[] = [
     icon: CircleDot,
     isNew: true,
     blurb: "Drop, line up four, and outsmart a coworker. The first live game.",
+  },
+  {
+    id: "word-snake",
+    name: "Word Snake",
+    category: "Word",
+    players: 0,
+    emoji: "🐍",
+    icon: Worm,
+    isNew: true,
+    blurb: "Chain words, outsmart coworkers. One letter at a time.",
   },
   {
     id: "geo-challenge",

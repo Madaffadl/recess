@@ -29,13 +29,18 @@ function OnlineCount({ count }: { count: number }) {
 }
 
 export function AnonymousLounge() {
-  const [identity, setIdentity] = useState<string>(() => randomHandle());
+  const [identity, setIdentity] = useState<string>("");
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const { messages, onlineCount, typingUser, sendMessage, notifyTyping } =
     useLounge({ handle: identity });
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // randomHandle runs only on the client to avoid SSR/client hydration mismatch
+  useEffect(() => {
+    setIdentity(randomHandle());
+  }, []);
 
   // Establish an anonymous Supabase session (best-effort; foundation for the
   // room + game phases). The lounge itself works with just the anon key.
