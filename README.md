@@ -164,3 +164,4 @@ supabase/
 > in-memory mock data so the UI stays fully explorable with no backend required.
 
 Co-authored-by: JokesOnDrei <faridgibrandrei@gmail.com>
+Co-authored-by: leonardusaudi <leonardus18081999@gmail.com>
