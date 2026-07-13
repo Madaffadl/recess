@@ -28,7 +28,12 @@ function OnlineCount({ count }: { count: number }) {
   );
 }
 
-export function AnonymousLounge() {
+/**
+ * The lounge's inner content — header, message list, composer. Rendered as a
+ * bare fragment so the surrounding shell (docked sidebar or floating popover)
+ * controls the container size and chrome. Expects a `flex flex-col` parent.
+ */
+export function LoungePanel() {
   const [identity, setIdentity] = useState<string>("");
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -79,7 +84,7 @@ export function AnonymousLounge() {
   const grouped = annotateGroups(messages);
 
   return (
-    <div className="glass flex h-full flex-col overflow-hidden rounded-2xl">
+    <>
       {/* Header */}
       <div className="border-b border-border p-4">
         <div className="flex items-center justify-between">
@@ -152,6 +157,15 @@ export function AnonymousLounge() {
         onTyping={notifyTyping}
         placeholder="Message the lounge…"
       />
+    </>
+  );
+}
+
+/** Docked lounge — the persistent right-hand sidebar used on most pages. */
+export function AnonymousLounge() {
+  return (
+    <div className="glass flex h-full flex-col overflow-hidden rounded-2xl">
+      <LoungePanel />
     </div>
   );
 }
