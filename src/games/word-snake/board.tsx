@@ -107,43 +107,63 @@ function PlayerRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 rounded-lg px-3 py-1.5 transition-all",
+        "relative flex flex-col justify-between gap-2 rounded-xl border px-3 py-2.5 transition-all",
         isActiveTurn
-          ? "bg-primary/[0.10] shadow-[inset_2px_0_0_0_hsl(var(--color-primary)/0.7)]"
-          : "",
+          ? "border-primary/60 bg-primary/[0.08] shadow-[0_0_0_1px_hsl(var(--color-primary)/0.35)]"
+          : "border-border bg-white/[0.02]",
         player.eliminated && "opacity-40"
       )}
     >
-      <span className={cn("size-2 flex-none rounded-full", dotColor)} />
-      {/* Name + turn badge grouped so "Aria turn" reads as a unit */}
-      <span className="flex min-w-0 flex-1 items-center gap-1.5">
-        <span className={cn("truncate text-[13px]", player.eliminated && "line-through")}>
+      {/* Name row */}
+      <div className="flex items-center gap-1.5">
+        <span className={cn("size-2.5 flex-none rounded-full", dotColor)} />
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate text-[13px] font-medium",
+            player.eliminated && "line-through"
+          )}
+        >
           {player.handle}
         </span>
         {isActiveTurn && !player.eliminated && (
           <span className="terminal-badge flex-none text-primary">turn</span>
         )}
-      </span>
-      {isMe && (
-        <span className="flex-none text-[10px] text-muted">(you)</span>
-      )}
-      <HeartsDisplay lives={player.lives} />
-      <span className="relative w-10 flex-none text-right tabular-nums text-[11px] text-subtle">
-        {scoreFlash && (
-          <motion.span
-            key={scoreFlash.key}
-            className="pointer-events-none absolute -top-4 right-0 text-[11px] font-bold text-primary"
-            initial={{ opacity: 1, y: 0 }}
-            animate={{ opacity: 0, y: -14 }}
-            transition={{ duration: 1.0, ease: "easeOut" }}
-          >
-            +{scoreFlash.delta}
-          </motion.span>
-        )}
-        {player.score}pt
-      </span>
+        {isMe && <span className="flex-none text-[10px] text-muted">(you)</span>}
+      </div>
+
+      {/* Lives + score row */}
+      <div className="flex items-center justify-between gap-2">
+        <HeartsDisplay lives={player.lives} />
+        <span className="relative tabular-nums text-[11px] text-subtle">
+          {scoreFlash && (
+            <motion.span
+              key={scoreFlash.key}
+              className="pointer-events-none absolute -top-4 right-0 text-[11px] font-bold text-primary"
+              initial={{ opacity: 1, y: 0 }}
+              animate={{ opacity: 0, y: -14 }}
+              transition={{ duration: 1.0, ease: "easeOut" }}
+            >
+              +{scoreFlash.delta}
+            </motion.span>
+          )}
+          {player.score}pt
+        </span>
+      </div>
     </div>
   );
+}
+
+// ── Word pile ───────────────────────────────────────────────────────────────
+// Deterministic scatter position for the word at chain index `i`. Derived from
+// the index (not Math.random) so words keep their spot across re-renders while
+// still piling up and overlapping — a "tumpukan" of used words.
+function wordScatter(i: number) {
+  const frac = (n: number) => n - Math.floor(n);
+  const seed = i + 1;
+  const left = 3 + frac(Math.sin(seed * 12.9898) * 43758.5453) * 84; // 3%–87%
+  const top = 6 + frac(Math.sin(seed * 78.233) * 43758.5453) * 62; // 6%–68%
+  const rot = (frac(Math.sin(seed * 3.14159) * 43758.5453) * 2 - 1) * 10; // ±10°
+  return { left, top, rot };
 }
 
 // ── Board ─────────────────────────────────────────────────────────────────────
@@ -164,7 +184,6 @@ export function WordSnakeBoard({ roomKey, handle }: GameBoardProps) {
   const triggerTimeoutRef = useRef(triggerTimeout);
   const timeoutFiredRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const chainEndRef = useRef<HTMLDivElement>(null);
   const timerBarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -232,15 +251,6 @@ export function WordSnakeBoard({ roomKey, handle }: GameBoardProps) {
     playTick(timeLeft);
   }, [timeLeft, status]);
 
-  // ── Auto-scroll chain ────────────────────────────────────────────────────
-  useEffect(() => {
-    chainEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-      inline: "end",
-      block: "nearest",
-    });
-  }, [state.chain.length]);
-
   const prompt = promptLetter(state.chain);
 
   // ── Word submission ──────────────────────────────────────────────────────
@@ -293,12 +303,12 @@ export function WordSnakeBoard({ roomKey, handle }: GameBoardProps) {
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="glass flex flex-col overflow-hidden rounded-2xl">
+    <div className="glass flex min-h-[580px] flex-col overflow-hidden rounded-2xl">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border p-4">
-        <div className="flex items-center gap-2">
-          <span className="text-base leading-none">🐍</span>
-          <h2 className="font-display text-[15px] font-semibold tracking-tight">
+      <div className="flex items-center justify-between border-b border-border px-6 py-4">
+        <div className="flex items-center gap-2.5">
+          <span className="text-lg leading-none">🐍</span>
+          <h2 className="font-display text-base font-semibold tracking-tight">
             Word Snake
           </h2>
         </div>
@@ -335,10 +345,11 @@ export function WordSnakeBoard({ roomKey, handle }: GameBoardProps) {
         )}
       </div>
 
-      {/* Player list — shown during waiting + active */}
+      {/* Player grid — shown during waiting + active. Up to 8 seats laid out
+          across the top band (2 rows of 4 on wide screens). */}
       {(status === "waiting" || status === "active") &&
         state.players.length > 0 && (
-          <div className="flex flex-col gap-0.5 px-2 pt-3">
+          <div className="grid grid-cols-2 gap-2 px-4 pt-4 sm:grid-cols-3 lg:grid-cols-4">
             {state.players.map((player, i) => (
               <PlayerRow
                 key={player.id}
@@ -353,7 +364,7 @@ export function WordSnakeBoard({ roomKey, handle }: GameBoardProps) {
 
       {/* Game over — final scoreboard */}
       {status === "finished" && sortedPlayers.length > 0 && (
-        <div className="flex flex-col gap-0.5 px-2 pt-4">
+        <div className="flex flex-col gap-0.5 px-4 pt-5">
           <p className="px-3 pb-1 text-[11px] uppercase tracking-wider text-subtle">
             Final scores
           </p>
@@ -392,73 +403,73 @@ export function WordSnakeBoard({ roomKey, handle }: GameBoardProps) {
         </div>
       )}
 
-      {/* Word chain */}
+      {/* Word pile — used words scatter and stack up ("tumpukan"), newest on top */}
       {state.chain.length > 0 && (
-        <div className="mt-4 overflow-x-auto px-4">
-          <div className="flex min-w-0 gap-1.5 pb-1">
-            {state.chain.map((word, i) => {
-              const isLatest = i === state.chain.length - 1;
-              return (
-                <span
-                  key={`${word}-${i}`}
-                  className={cn(
-                    "flex-none rounded-lg border px-2.5 py-1 font-mono text-[13px]",
-                    isLatest
-                      ? "border-border-strong bg-elevated"
-                      : "border-border text-muted"
-                  )}
-                >
-                  {isLatest ? (
-                    word.length > 1 ? (
-                      <>
-                        <span>{word.slice(0, -1)}</span>
-                        <span className="font-bold text-primary">
-                          {word.slice(-1).toUpperCase()}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="font-bold text-primary">
-                        {word.toUpperCase()}
-                      </span>
-                    )
-                  ) : (
-                    word
-                  )}
-                </span>
-              );
-            })}
-            <div ref={chainEndRef} className="flex-none" />
-          </div>
+        <div className="relative mx-6 mt-5 h-40 overflow-hidden rounded-xl border border-border/60 bg-white/[0.015]">
+          {state.chain.map((word, i) => {
+            const isLatest = i === state.chain.length - 1;
+            const { left, top, rot } = wordScatter(i);
+            return (
+              <motion.span
+                key={`${word}-${i}`}
+                initial={{ scale: 0.5, opacity: 0, rotate: rot }}
+                animate={{ scale: 1, opacity: isLatest ? 1 : 0.8, rotate: rot }}
+                transition={{ type: "spring", stiffness: 380, damping: 20 }}
+                className={cn(
+                  "absolute whitespace-nowrap rounded-lg border px-2.5 py-1 font-mono text-[14px] shadow-md",
+                  isLatest
+                    ? "border-primary/50 bg-elevated text-foreground shadow-primary/10"
+                    : "border-border bg-card/90 text-muted"
+                )}
+                style={{ left: `${left}%`, top: `${top}%`, zIndex: i }}
+              >
+                {isLatest && word.length > 1 ? (
+                  <>
+                    <span>{word.slice(0, -1)}</span>
+                    <span className="font-bold text-primary">
+                      {word.slice(-1).toUpperCase()}
+                    </span>
+                  </>
+                ) : (
+                  word
+                )}
+              </motion.span>
+            );
+          })}
         </div>
       )}
 
       {/* Active game: prompt + timer + input */}
       {status === "active" && (
-        <div className="flex flex-col gap-3 px-4 pb-2 pt-4">
+        <div className="flex flex-col gap-4 px-6 pb-4 pt-6">
           {prompt && (
-            <p className="text-center text-[13px] text-muted">
-              Next word must start with{" "}
-              <span className="font-display text-[28px] font-bold leading-none text-primary">
+            <div className="flex flex-col items-center gap-1.5 py-4">
+              <span className="text-[11px] uppercase tracking-widest text-subtle">
+                next word starts with
+              </span>
+              <span className="font-display text-[72px] font-bold leading-none text-primary">
                 {prompt}
               </span>
-            </p>
+            </div>
           )}
 
-          {/* Timer bar — visible to all players */}
+          {/* Timer bar — visible to all players. Width is driven imperatively
+              by the countdown effect via `timerBarRef` (ms-precise, no jitter);
+              we deliberately do NOT bind width in JSX, or the once-a-second
+              re-render would snap it back and cause a visible stutter. */}
           <div>
-            <div className="h-1 w-full overflow-hidden rounded-full bg-border">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-border">
               <div
                 ref={timerBarRef}
                 className={cn(
-                  "h-full rounded-full",
+                  "h-full w-full rounded-full transition-colors",
                   timeLeft <= 3 ? "bg-red-400" : "bg-primary"
                 )}
-                style={{ width: `${(timeLeft / TURN_SECONDS) * 100}%` }}
               />
             </div>
             <p
               className={cn(
-                "mt-0.5 text-right text-[11px] tabular-nums",
+                "mt-1 text-right text-[11px] tabular-nums",
                 timeLeft <= 3 ? "text-red-400" : "text-subtle"
               )}
             >
@@ -521,7 +532,7 @@ export function WordSnakeBoard({ roomKey, handle }: GameBoardProps) {
       )}
 
       {/* Actions footer */}
-      <div className="mt-auto flex flex-col items-center gap-2 border-t border-border p-4">
+      <div className="mt-auto flex flex-col items-center gap-3 border-t border-border px-6 py-5">
         {error && (
           <p className="text-xs text-red-400" translate="no">
             {error}
