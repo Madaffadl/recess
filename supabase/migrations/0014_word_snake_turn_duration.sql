@@ -11,6 +11,15 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 
+-- Drop previous overloads of word_snake_start so PostgREST has exactly one
+-- signature to resolve against.  Each migration added a param without dropping
+-- the previous version, leaving orphaned overloads that can cause schema cache
+-- lookup failures.
+drop function if exists word_snake_start(uuid);
+drop function if exists word_snake_start(uuid, int);
+drop function if exists word_snake_start(uuid, int, text);
+
+
 -- ── word_snake_start (updated) ───────────────────────────────────────────────
 create or replace function word_snake_start(
   p_session_id   uuid,
