@@ -10,6 +10,7 @@ import {
   Keyboard,
   CircleDot,
   Worm,
+  Shield,
   type LucideIcon,
 } from "lucide-react";
 
@@ -60,6 +61,16 @@ export const GAMES: Game[] = [
     icon: Worm,
     isNew: true,
     blurb: "Chain words, outsmart coworkers. One letter at a time.",
+  },
+  {
+    id: "military-zone",
+    name: "Gunjin Shōgi",
+    category: "Puzzle",
+    players: 0,
+    emoji: "🎖️",
+    icon: Shield,
+    isNew: true,
+    blurb: "Deploy hidden forces, outmaneuver your opponent, capture their HQ.",
   },
   {
     id: "geo-challenge",
@@ -150,6 +161,7 @@ export const GAMES: Game[] = [
 export const POPULAR_GAMES = [...GAMES].sort((a, b) => b.players - a.players);
 export const NEW_GAMES = GAMES.filter((g) => g.isNew);
 export const RECENTLY_PLAYED = [
+  "military-zone",
   "geo-challenge",
   "draw-together",
   "word-clash",
