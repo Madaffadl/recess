@@ -1,5 +1,6 @@
 import type { GameModule } from "./types";
 import { connectFour } from "./connect-four";
+import { uno } from "./uno";
 
 /**
  * Playable games. A game appears here only once its module + SQL logic exist;
@@ -8,7 +9,7 @@ import { connectFour } from "./connect-four";
  * To add a game: create `src/games/<game>/`, add its `0004_<game>.sql`
  * migration, then add the module to this array.
  */
-const MODULES: GameModule[] = [connectFour];
+const MODULES: GameModule[] = [connectFour, uno];
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]));
 
