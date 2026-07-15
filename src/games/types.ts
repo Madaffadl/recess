@@ -49,4 +49,10 @@ export type GameModule = {
   minPlayers: number;
   maxPlayers: number;
   Board: ComponentType<GameBoardProps>;
+  /**
+   * 'inline'   → rendered inside the room page (default, existing behaviour).
+   * 'fullpage' → room page shows a lobby; on game start all players navigate
+   *              to /rooms/[id]/play which renders the Board full-screen.
+   */
+  renderMode?: "inline" | "fullpage";
 };
