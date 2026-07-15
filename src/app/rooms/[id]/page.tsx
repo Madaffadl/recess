@@ -20,6 +20,7 @@ import { ChatComposer } from "@/components/chat-composer";
 import { FloatingLounge } from "@/components/floating-lounge";
 import { getGameModule } from "@/games/registry";
 import { GameComingSoon } from "@/games/game-coming-soon";
+import { DrawTogetherLobby } from "@/games/draw-together/lobby";
 import { randomHandle } from "@/lib/data";
 import { joinRoom, leaveRoom, closeRoom, getRoomByInviteCode } from "@/lib/api/rooms";
 import { useRoom } from "@/hooks/use-room";
@@ -158,8 +159,17 @@ export default function RoomDetailPage() {
   const {
     messages, presentHandles, presentPeers, onlineCount, typingUser,
     connected, activity, selfKey, selfUid, removed,
+    gameStarted, notifyGameStarted,
     sendMessage, notifyTyping, kick, closeForAll,
   } = useRoom({ roomId: params.id, handle: identity, seed: [] });
+
+  // Fullpage games: navigate when any client receives game_started broadcast
+  useEffect(() => {
+    if (gameStarted) {
+      sessionStorage.setItem("recess-handle", identity);
+      router.push(`/rooms/${params.id}/play`);
+    }
+  }, [gameStarted, params.id, identity, router]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -368,7 +378,18 @@ export default function RoomDetailPage() {
 
       {/* Game — full width, right padding keeps it off the screen edge */}
       <div className="mt-8 pr-1 lg:pr-4">
-        {gameModule ? (
+        {gameModule?.renderMode === "fullpage" ? (
+          <DrawTogetherLobby
+            roomKey={room.id}
+            handle={identity}
+            isHost={isHost}
+            onGameStarted={() => {
+              sessionStorage.setItem("recess-handle", identity);
+              notifyGameStarted();
+              router.push(`/rooms/${params.id}/play`);
+            }}
+          />
+        ) : gameModule ? (
           <gameModule.Board roomKey={room.id} handle={identity} />
         ) : (
           <GameComingSoon gameName={room.gameName} gameEmoji={room.gameEmoji} />
