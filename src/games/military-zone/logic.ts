@@ -1,122 +1,121 @@
 export const MILITARY_ZONE_ID = 'military-zone';
+export const GRID_SIZE = 10;
 
-export const COLS = 7;
-export const ROWS = 8;
-export const CELLS = COLS * ROWS; // 56
+export const COL_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+export const ROW_LABELS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
 
-export type PieceRank =
-  | 'general' | 'major' | 'captain' | 'lieutenant'
-  | 'tank' | 'engineer' | 'spy' | 'landmine' | 'hq';
+export type ShipId = 'carrier' | 'battleship' | 'destroyer' | 'submarine' | 'patrol';
+export type Orient = 'H' | 'V';
+export type ShotResult = 'hit' | 'miss';
+export type ShotCell = ShotResult | null;
 
-export type Piece = {
-  id: string;
-  rank: PieceRank;
-  player: 1 | 2;
-  pos: number; // 0-55, row-major: pos = row*7 + col
+export type ShipDef = {
+  id: ShipId;
+  name: string;
+  size: number;
 };
 
-export type BattleResult = 'attacker_wins' | 'defender_wins' | 'mutual_destruction';
-
-export type MilitaryZoneGame = {
-  pieces: Piece[];
-  phase: 'setup' | 'playing' | 'finished';
-  setupDone: [boolean, boolean];
-  lastBattle: { pos: number; result: BattleResult } | null;
-};
-
-// 15 pieces per player
-export const PIECE_DEFS = [
-  { rank: 'general'    as PieceRank, count: 1, label: 'General',    abbr: 'GEN' },
-  { rank: 'major'      as PieceRank, count: 1, label: 'Major',      abbr: 'MAJ' },
-  { rank: 'captain'    as PieceRank, count: 2, label: 'Captain',    abbr: 'CPT' },
-  { rank: 'lieutenant' as PieceRank, count: 3, label: 'Lieutenant', abbr: 'LT'  },
-  { rank: 'tank'       as PieceRank, count: 2, label: 'Tank',       abbr: 'TNK' },
-  { rank: 'engineer'   as PieceRank, count: 1, label: 'Engineer',   abbr: 'ENG' },
-  { rank: 'spy'        as PieceRank, count: 1, label: 'Spy',        abbr: 'SPY' },
-  { rank: 'landmine'   as PieceRank, count: 3, label: 'Landmine',   abbr: '☠'   },
-  { rank: 'hq'         as PieceRank, count: 1, label: 'HQ',         abbr: 'HQ'  },
+export const SHIPS: ShipDef[] = [
+  { id: 'carrier',    name: 'Carrier',     size: 5 },
+  { id: 'battleship', name: 'Battleship',  size: 4 },
+  { id: 'destroyer',  name: 'Destroyer',   size: 3 },
+  { id: 'submarine',  name: 'Submarine',   size: 3 },
+  { id: 'patrol',     name: 'Patrol Boat', size: 2 },
 ];
 
-export const RANK_ABBR: Record<PieceRank, string> = {
-  general: 'GEN', major: 'MAJ', captain: 'CPT', lieutenant: 'LT',
-  tank: 'TNK', engineer: 'ENG', spy: 'SPY', landmine: '☠', hq: 'HQ',
+export type PlacedShip = {
+  id: ShipId;
+  player: 1 | 2;
+  r: number;
+  c: number;
+  size: number;
+  orient: Orient;
+  sunk: boolean;
 };
 
-export const RANK_LABEL: Record<PieceRank, string> = {
-  general: 'General', major: 'Major', captain: 'Captain', lieutenant: 'Lieutenant',
-  tank: 'Tank', engineer: 'Engineer', spy: 'Spy', landmine: 'Landmine', hq: 'HQ',
+export type PendingShip = {
+  id: ShipId;
+  size: number;
+  r: number;
+  c: number;
+  orient: Orient;
 };
 
-export type SetupEntry = { id: string; rank: PieceRank; pos: number | null };
+export type BattleshipGame = {
+  phase: 'placement' | 'battle' | 'finished';
+  ready: Record<string, boolean>;
+  ships: PlacedShip[];
+  shots: Record<string, ShotCell[][]>;
+  lastShot: {
+    by: 1 | 2;
+    r: number;
+    c: number;
+    result: ShotResult;
+    sunkId?: string;
+  } | null;
+};
 
-export function generateSetupPieces(player: 1 | 2): SetupEntry[] {
-  const out: SetupEntry[] = [];
-  for (const def of PIECE_DEFS) {
-    for (let i = 0; i < def.count; i++) {
-      out.push({ id: `p${player}_${def.rank}_${i}`, rank: def.rank, pos: null });
+export function shipCells(
+  r: number, c: number, size: number, orient: Orient
+): [number, number][] {
+  const cells: [number, number][] = [];
+  for (let i = 0; i < size; i++) {
+    cells.push(orient === 'H' ? [r, c + i] : [r + i, c]);
+  }
+  return cells;
+}
+
+export function isValidPlacement(
+  r: number, c: number, size: number, orient: Orient,
+  existing: PendingShip[]
+): boolean {
+  const cells = shipCells(r, c, size, orient);
+  for (const [cr, cc] of cells) {
+    if (cr < 0 || cr >= GRID_SIZE || cc < 0 || cc >= GRID_SIZE) return false;
+  }
+  const occupied = new Set<string>();
+  for (const s of existing) {
+    for (const [sr, sc] of shipCells(s.r, s.c, s.size, s.orient)) {
+      occupied.add(`${sr},${sc}`);
     }
   }
-  return out;
+  for (const [cr, cc] of cells) {
+    if (occupied.has(`${cr},${cc}`)) return false;
+  }
+  return true;
 }
 
-export function posToRowCol(pos: number): [number, number] {
-  return [Math.floor(pos / COLS), pos % COLS];
-}
-
-export function rowColToPos(row: number, col: number): number {
-  return row * COLS + col;
-}
-
-// P1 territory rows 4-7 (pos 28-55); P2 territory rows 0-3 (pos 0-27)
-export function inTerritory(pos: number, player: 1 | 2): boolean {
-  return player === 1 ? pos >= 28 : pos <= 27;
-}
-
-export function getValidMoves(piece: Piece, allPieces: Piece[]): number[] {
-  const { rank, pos, player } = piece;
-  if (rank === 'landmine' || rank === 'hq') return [];
-
-  const [row, col] = posToRowCol(pos);
-  const allySet = new Set(allPieces.filter(p => p.player === player).map(p => p.pos));
-  const enemySet = new Set(allPieces.filter(p => p.player !== player).map(p => p.pos));
-  const allSet = new Set(allPieces.map(p => p.pos));
-
-  const valid: number[] = [];
-  const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-
-  if (['general', 'major', 'captain', 'lieutenant', 'spy'].includes(rank)) {
-    for (const [dr, dc] of dirs) {
-      const nr = row + dr, nc = col + dc;
-      if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
-      const npos = rowColToPos(nr, nc);
-      if (!allySet.has(npos)) valid.push(npos);
-    }
-  } else if (rank === 'tank') {
-    const fwd = player === 1 ? -1 : 1;
-    const r1 = row + fwd;
-    if (r1 >= 0 && r1 < ROWS) {
-      const pos1 = rowColToPos(r1, col);
-      if (!allySet.has(pos1)) valid.push(pos1);
-      if (!allSet.has(pos1)) {
-        const r2 = row + fwd * 2;
-        if (r2 >= 0 && r2 < ROWS) {
-          const pos2 = rowColToPos(r2, col);
-          if (!allySet.has(pos2)) valid.push(pos2);
-        }
-      }
-    }
-  } else if (rank === 'engineer') {
-    for (const [dr, dc] of dirs) {
-      for (let step = 1; step <= 7; step++) {
-        const nr = row + dr * step, nc = col + dc * step;
-        if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) break;
-        const npos = rowColToPos(nr, nc);
-        if (allySet.has(npos)) break;
-        valid.push(npos);
-        if (enemySet.has(npos)) break;
-      }
+export function buildOccupiedSet(ships: (PlacedShip | PendingShip)[]): Set<string> {
+  const s = new Set<string>();
+  for (const ship of ships) {
+    for (const [r, c] of shipCells(ship.r, ship.c, ship.size, ship.orient)) {
+      s.add(`${r},${c}`);
     }
   }
+  return s;
+}
 
-  return valid;
+export function emptyShots(): ShotCell[][] {
+  return Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(null));
+}
+
+// Randomly fill unplaced ships onto the grid
+export function autoPlace(existing: PendingShip[]): PendingShip[] {
+  const result = [...existing];
+  const remaining = SHIPS.filter((s) => !result.some((p) => p.id === s.id));
+  for (const ship of remaining) {
+    let placed = false;
+    let attempts = 0;
+    while (!placed && attempts < 400) {
+      const r = Math.floor(Math.random() * GRID_SIZE);
+      const c = Math.floor(Math.random() * GRID_SIZE);
+      const orient: Orient = Math.random() < 0.5 ? "H" : "V";
+      if (isValidPlacement(r, c, ship.size, orient, result)) {
+        result.push({ id: ship.id, size: ship.size, r, c, orient });
+        placed = true;
+      }
+      attempts++;
+    }
+  }
+  return result;
 }

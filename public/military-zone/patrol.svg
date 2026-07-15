@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 68 32">
+  <!-- Compact fast hull -->
+  <path d="M2,12 L58,11 L68,16 L58,21 L2,20 Z" fill="#1A3F6F" stroke="#081C36" stroke-width="1"/>
+  <!-- Hull keel -->
+  <rect x="4" y="20" width="56" height="3" rx="1" fill="#0C2540"/>
+  <!-- Deck -->
+  <rect x="2" y="8" width="60" height="4" rx="1" fill="#163356" stroke="#081C36" stroke-width="0.5"/>
+  <!-- Cabin/wheelhouse -->
+  <rect x="32" y="3" width="22" height="9" rx="2" fill="#1A3F6F" stroke="#081C36" stroke-width="0.7"/>
+  <rect x="36" y="1" width="14" height="7" rx="1.5" fill="#2255A0"/>
+  <!-- Window strip -->
+  <rect x="37" y="2.5" width="12" height="2.5" rx="1" fill="#3A80C0" opacity="0.6"/>
+  <!-- Forward mounted gun -->
+  <rect x="12" y="8" width="12" height="4" rx="1" fill="#1A3F6F" stroke="#081C36" stroke-width="0.6"/>
+  <rect x="20" y="9.5" width="8" height="1.5" rx="0.5" fill="#3A80C0"/>
+  <!-- Speed lines (bow) -->
+  <path d="M58,14 Q65,16 58,18" fill="none" stroke="#3A80C0" stroke-width="0.8" opacity="0.5"/>
+  <!-- Engine exhaust hint -->
+  <rect x="4" y="13" width="6" height="3" rx="1" fill="#0C2540"/>
+</svg>
