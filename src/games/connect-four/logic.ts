@@ -37,3 +37,26 @@ export function columnFull(board: Cell[], col: number): boolean {
 export function emptyBoard(): Cell[] {
   return Array<Cell>(CELLS).fill(0);
 }
+
+/** Returns the set of flat board indices that form the winning line(s). */
+export function findWinCells(board: Cell[], winner: 1 | 2): Set<number> {
+  const result = new Set<number>();
+  const dirs: [number, number][] = [[0, 1], [1, 0], [1, 1], [1, -1]];
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      for (const [dr, dc] of dirs) {
+        const line: number[] = [];
+        for (let n = 0; n < 4; n++) {
+          const nr = r + dr * n;
+          const nc = c + dc * n;
+          if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) break;
+          if (board[nr * COLS + nc] !== winner) break;
+          line.push(nr * COLS + nc);
+        }
+        if (line.length === 4) line.forEach((i) => result.add(i));
+      }
+    }
+  }
+  return result;
+}
