@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, SearchX } from "lucide-react";
+import { Search, SearchX, Shield } from "lucide-react";
+import Link from "next/link";
 
 import { PageHeader, PageShell } from "@/components/page-shell";
 import { GameCard } from "@/components/game-card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   GAMES,
@@ -48,8 +50,11 @@ export default function DiscoverPage() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<GameCategory>("All");
 
-  const q = query.trim().toLowerCase();
+  const q = query.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   const filtering = q !== "" || category !== "All";
+
+  const normalize = (s: string) =>
+    s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
   const results = useMemo(
     () =>
@@ -57,10 +62,12 @@ export default function DiscoverPage() {
         (g) =>
           (category === "All" || g.category === category) &&
           (q === "" ||
-            g.name.toLowerCase().includes(q) ||
-            g.blurb.toLowerCase().includes(q) ||
-            g.category.toLowerCase().includes(q))
+            normalize(g.name).includes(q) ||
+            normalize(g.blurb).includes(q) ||
+            normalize(g.category).includes(q) ||
+            g.id.replace(/-/g, " ").includes(q))
       ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [q, category]
   );
 
@@ -71,6 +78,62 @@ export default function DiscoverPage() {
         title="Find your next game"
         description="Browse everything you can play on your break. Search, filter by category, or pick up where you left off."
       />
+
+      {/* Featured spotlight — Military Zone */}
+      <div className="mt-8 overflow-hidden rounded-2xl border border-[#0F3050] bg-[#050F1C]">
+        <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:gap-8">
+          {/* Icon */}
+          <div className="flex size-16 shrink-0 items-center justify-center rounded-xl border border-[#0F3050] bg-[#091828] text-4xl sm:size-20">
+            🎖️
+          </div>
+
+          {/* Copy */}
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded border border-[#00E59A]/60 px-2 py-0.5 font-mono text-[10px] tracking-widest text-[#00E59A]">
+                NEW RELEASE
+              </span>
+              <Shield className="size-3 text-[#2A6090]" />
+            </div>
+            <h2 className="mt-1.5 font-display text-xl font-semibold tracking-tight text-[#8FBCD4]">
+              Military Zone
+            </h2>
+            <p className="mt-1 text-sm leading-relaxed text-[#2A6090]">
+              A two-player naval strategy game. Hide your fleet on a 10×10 grid,
+              then hunt down every enemy vessel before they find yours.
+              10 seconds per salvo — no hesitation allowed.
+            </p>
+
+            {/* Ship legend */}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {["CARRIER", "BATTLESHIP", "DESTROYER", "SUBMARINE", "PATROL"].map((name) => (
+                <span
+                  key={name}
+                  className="rounded border border-[#0F3050] bg-[#091828] px-1.5 py-0.5 font-mono text-[10px] text-[#8FBCD4]"
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* CTA */}
+          <div className="shrink-0">
+            <Button
+              asChild
+              className="font-mono tracking-widest text-[#050F1C]"
+              style={{ background: "#00E59A" }}
+            >
+              <Link href="/rooms?game=military-zone">DEPLOY →</Link>
+            </Button>
+          </div>
+        </div>
+
+        {/* Bottom rule */}
+        <div className="border-t border-[#0F3050]/30 px-6 py-2 font-mono text-[10px] tracking-widest text-[#2A6090]">
+          NAVAL STRATEGY · 2 PLAYERS · LIVE MULTIPLAYER · 10s PER SALVO
+        </div>
+      </div>
 
       {/* Search + categories */}
       <div className="mt-8 flex flex-col gap-4">

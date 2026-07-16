@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 32">
+  <!-- Main hull -->
+  <path d="M4,11 L164,11 L174,16 L164,21 L4,21 Z" fill="#1A3F6F" stroke="#081C36" stroke-width="1"/>
+  <!-- Hull keel shadow -->
+  <rect x="6" y="21" width="160" height="3" rx="1" fill="#0C2540"/>
+  <!-- Flight deck (wide flat top surface) -->
+  <rect x="2" y="7" width="166" height="5" rx="1" fill="#163356" stroke="#081C36" stroke-width="0.5"/>
+  <!-- Deck center stripe -->
+  <line x1="8" y1="9.5" x2="108" y2="9.5" stroke="#2A6099" stroke-width="1" stroke-dasharray="10 4"/>
+  <!-- Island superstructure -->
+  <rect x="114" y="3" width="40" height="9" rx="2" fill="#1A3F6F" stroke="#081C36" stroke-width="0.8"/>
+  <rect x="120" y="1" width="26" height="7" rx="1.5" fill="#2255A0"/>
+  <!-- Mast -->
+  <rect x="132" y="0" width="2" height="4" rx="1" fill="#3A80C0"/>
+  <!-- Radar dish hint -->
+  <ellipse cx="133" cy="0" rx="4" ry="1.5" fill="none" stroke="#3A80C0" stroke-width="1"/>
+  <!-- Deck edge highlight -->
+  <line x1="4" y1="7" x2="162" y2="7" stroke="#3A80C0" stroke-width="0.5" opacity="0.5"/>
+  <!-- Bow wave detail -->
+  <path d="M164,14 Q172,16 164,18" fill="none" stroke="#3A80C0" stroke-width="0.8" opacity="0.6"/>
+</svg>
