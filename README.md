@@ -162,3 +162,4 @@ supabase/
 > With Supabase configured, rooms, game state, presence, and chat are backed by
 > a real Postgres + Realtime backend. Without it, the app falls back to
 > in-memory mock data so the UI stays fully explorable with no backend required.
+

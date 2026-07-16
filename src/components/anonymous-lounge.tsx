@@ -28,14 +28,24 @@ function OnlineCount({ count }: { count: number }) {
   );
 }
 
-export function AnonymousLounge() {
-  const [identity, setIdentity] = useState<string>(() => randomHandle());
+/**
+ * The lounge's inner content — header, message list, composer. Rendered as a
+ * bare fragment so the surrounding shell (docked sidebar or floating popover)
+ * controls the container size and chrome. Expects a `flex flex-col` parent.
+ */
+export function LoungePanel() {
+  const [identity, setIdentity] = useState<string>("");
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const { messages, onlineCount, typingUser, sendMessage, notifyTyping } =
     useLounge({ handle: identity });
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // randomHandle runs only on the client to avoid SSR/client hydration mismatch
+  useEffect(() => {
+    setIdentity(randomHandle());
+  }, []);
 
   // Establish an anonymous Supabase session (best-effort; foundation for the
   // room + game phases). The lounge itself works with just the anon key.
@@ -74,7 +84,7 @@ export function AnonymousLounge() {
   const grouped = annotateGroups(messages);
 
   return (
-    <div className="glass flex h-full flex-col overflow-hidden rounded-2xl">
+    <>
       {/* Header */}
       <div className="border-b border-border p-4">
         <div className="flex items-center justify-between">
@@ -147,6 +157,15 @@ export function AnonymousLounge() {
         onTyping={notifyTyping}
         placeholder="Message the lounge…"
       />
+    </>
+  );
+}
+
+/** Docked lounge — the persistent right-hand sidebar used on most pages. */
+export function AnonymousLounge() {
+  return (
+    <div className="glass flex h-full flex-col overflow-hidden rounded-2xl">
+      <LoungePanel />
     </div>
   );
 }

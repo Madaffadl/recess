@@ -17,8 +17,10 @@ import {
   TypingIndicator,
 } from "@/components/chat-message";
 import { ChatComposer } from "@/components/chat-composer";
+import { FloatingLounge } from "@/components/floating-lounge";
 import { getGameModule } from "@/games/registry";
 import { GameComingSoon } from "@/games/game-coming-soon";
+import { DrawTogetherLobby } from "@/games/draw-together/lobby";
 import { randomHandle } from "@/lib/data";
 import { joinRoom, leaveRoom, closeRoom, getRoomByInviteCode } from "@/lib/api/rooms";
 import { useRoom } from "@/hooks/use-room";
@@ -157,8 +159,17 @@ export default function RoomDetailPage() {
   const {
     messages, presentHandles, presentPeers, onlineCount, typingUser,
     connected, activity, selfKey, selfUid, removed,
+    gameStarted, notifyGameStarted,
     sendMessage, notifyTyping, kick, closeForAll,
   } = useRoom({ roomId: params.id, handle: identity, seed: [] });
+
+  // Fullpage games: navigate when any client receives game_started broadcast
+  useEffect(() => {
+    if (gameStarted) {
+      sessionStorage.setItem("recess-handle", identity);
+      router.push(`/rooms/${params.id}/play`);
+    }
+  }, [gameStarted, params.id, identity, router]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -297,7 +308,7 @@ export default function RoomDetailPage() {
     room.visibility === "private" ? inviteParam ?? room.inviteCode ?? null : null;
 
   return (
-    <PageShell>
+    <div className="w-full px-5 pb-4 pt-12 sm:px-8 lg:pt-16">
       <Link
         href="/rooms"
         className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-foreground"
@@ -365,25 +376,91 @@ export default function RoomDetailPage() {
         </div>
       </div>
 
-      {/* Game + chat */}
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1.15fr_1fr]">
-        {gameModule ? (
+      {/* Game — full width, right padding keeps it off the screen edge */}
+      <div className="mt-8 pr-1 lg:pr-4">
+        {gameModule?.renderMode === "fullpage" ? (
+          <DrawTogetherLobby
+            roomKey={room.id}
+            handle={identity}
+            isHost={isHost}
+            onGameStarted={() => {
+              sessionStorage.setItem("recess-handle", identity);
+              notifyGameStarted();
+              router.push(`/rooms/${params.id}/play`);
+            }}
+          />
+        ) : gameModule ? (
           <gameModule.Board roomKey={room.id} handle={identity} />
         ) : (
           <GameComingSoon gameName={room.gameName} gameEmoji={room.gameEmoji} />
         )}
+      </div>
 
-        {/* Chat */}
-        <div className="flex h-[560px] flex-col overflow-hidden rounded-2xl border border-border bg-card">
-          <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-            <h2 className="font-display text-sm font-semibold">Room chat</h2>
+      {/* Participants · Room chat · Activity — parallel row, 1 : 2 : 1 */}
+      <div className="mt-5 grid gap-5 pr-1 lg:grid-cols-[1fr_2fr_1fr] lg:pr-4">
+        {/* Participants */}
+        <div className="flex h-[360px] flex-col overflow-hidden rounded-2xl border border-border bg-card p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-xs font-semibold uppercase tracking-wider text-muted">
+              Participants
+            </h2>
+            <span className="terminal-badge text-subtle">
+              <span className="tabular-nums">{participantCount}</span>/{room.capacity}
+            </span>
+          </div>
+          <ul className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto">
+            {displayPeers.map((peer) => {
+              const isSelf = peer.key === selfKey;
+              const peerIsHost = !!peer.uid && peer.uid === room.hostId;
+              return (
+                <li key={peer.key} className="flex items-center gap-2">
+                  <UserAvatar name={peer.handle} className="size-6" />
+                  <span className="flex-1 truncate text-xs">
+                    {isSelf ? (
+                      <span>{peer.handle} <span className="text-[10px] text-muted">(you)</span></span>
+                    ) : peer.handle}
+                  </span>
+                  {peerIsHost && <Badge variant="primary">host</Badge>}
+                  {isHost && !isSelf && (
+                    <button
+                      type="button"
+                      aria-label={`Remove ${peer.handle}`}
+                      onClick={() => kick(peer.key)}
+                      className="grid size-6 shrink-0 place-items-center rounded-md border border-border text-subtle transition-colors hover:border-red-500/40 hover:text-red-400"
+                    >
+                      <UserMinus className="size-3" />
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          {inviteCode && (
+            <div className="mt-3 rounded-xl border border-border bg-elevated px-3 py-2.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-subtle">
+                Invite code
+              </p>
+              <p className="mt-0.5 font-mono text-xs font-semibold tracking-widest text-foreground">
+                {inviteCode}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Room chat — the wide center column */}
+        <div className="flex h-[360px] flex-col overflow-hidden rounded-2xl border border-border bg-card">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <h2 className="font-display text-xs font-semibold uppercase tracking-wider text-muted">
+              Room chat
+            </h2>
             <span className="terminal-badge text-subtle">
               you&apos;re <span className="text-muted">{identity}</span>
             </span>
           </div>
-          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
             {messages.length === 0 && (
-              <p className="pt-4 text-center text-sm text-subtle">
+              <p className="pt-4 text-center text-xs text-subtle">
                 No messages yet. Say hello!
               </p>
             )}
@@ -406,83 +483,34 @@ export default function RoomDetailPage() {
             disabled={!connected}
           />
         </div>
-      </div>
 
-      {/* Participants + activity */}
-      <div className="mt-6 grid gap-6 sm:grid-cols-2">
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="font-display text-sm font-semibold">Participants</h2>
-            <span className="terminal-badge text-subtle">
-              <span className="tabular-nums">{participantCount}</span>/{room.capacity}
-            </span>
-          </div>
-          <ul className="mt-4 space-y-3">
-            {displayPeers.map((peer) => {
-              const isSelf = peer.key === selfKey;
-              const peerIsHost = !!peer.uid && peer.uid === room.hostId;
-              return (
-                <li key={peer.key} className="flex items-center gap-3">
-                  <UserAvatar name={peer.handle} className="size-8" />
-                  <span className="flex-1 truncate text-sm">
-                    {isSelf ? (
-                      <span>{peer.handle} <span className="text-xs text-muted">(you)</span></span>
-                    ) : peer.handle}
-                  </span>
-                  {peerIsHost && <Badge variant="primary">host</Badge>}
-                  {/* Host-only: remove another participant */}
-                  {isHost && !isSelf && (
-                    <button
-                      type="button"
-                      aria-label={`Remove ${peer.handle}`}
-                      onClick={() => kick(peer.key)}
-                      className="grid size-7 shrink-0 place-items-center rounded-lg border border-border text-subtle transition-colors hover:border-red-500/40 hover:text-red-400"
-                    >
-                      <UserMinus className="size-3.5" />
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-
-          {/* Invite code block for host or anyone with the code */}
-          {inviteCode && (
-            <div className="mt-5 rounded-xl border border-border bg-elevated px-4 py-3">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-subtle">
-                Invite code
-              </p>
-              <p className="mt-1 font-mono text-sm font-semibold tracking-widest text-foreground">
-                {inviteCode}
-              </p>
-              <p className="mt-0.5 text-[11px] text-subtle">
-                Share this with teammates to let them join.
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-display text-sm font-semibold">Activity</h2>
+        {/* Activity */}
+        <div className="flex h-[360px] flex-col overflow-hidden rounded-2xl border border-border bg-card p-4">
+          <h2 className="font-display text-xs font-semibold uppercase tracking-wider text-muted">
+            Activity
+          </h2>
           {activity.length === 0 ? (
-            <div className="mt-4 flex flex-col items-center gap-2 py-6 text-center">
-              <Users className="size-5 text-subtle" />
-              <p className="text-sm text-muted">
-                {connected ? "No activity yet — be the first to move!" : "Connecting to room…"}
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+              <Users className="size-4 text-subtle" />
+              <p className="text-xs text-subtle">
+                {connected ? "No activity yet." : "Connecting…"}
               </p>
             </div>
           ) : (
-            <ul className="mt-4 space-y-3">
+            <ul className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto">
               {activity.map((a) => (
-                <li key={a.id} className="flex items-start gap-2.5">
-                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-muted/50" />
-                  <p className="text-[13px] leading-snug text-muted">{a.text}</p>
+                <li key={a.id} className="flex items-start gap-2">
+                  <span className="mt-1.5 size-1 shrink-0 rounded-full bg-muted/50" />
+                  <p className="text-[11px] leading-snug text-subtle">{a.text}</p>
                 </li>
               ))}
             </ul>
           )}
         </div>
       </div>
-    </PageShell>
+
+      {/* Minimized lounge — floating chat widget, collapsed by default */}
+      <FloatingLounge />
+    </div>
   );
 }
