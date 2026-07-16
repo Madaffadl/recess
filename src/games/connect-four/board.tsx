@@ -1,8 +1,8 @@
 "use client";
 
-import { motion } from "motion/react";
-import { Check, Copy, Loader2, Swords, Trophy } from "lucide-react";
-import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { Check, Copy, Crown, Loader2, Swords, Trophy } from "lucide-react";
+import { useState, useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -15,32 +15,103 @@ import {
   cellAt,
   columnFull,
   emptyBoard,
+  findWinCells,
   type Cell,
   type ConnectFourGame,
 } from "./logic";
 
-/** Disc colour classes per player. P1 = amber (brand), P2 = sky. */
-const DISC: Record<Player, string> = {
-  1: "bg-amber-400 shadow-[0_0_0_1px_rgba(245,158,11,0.4),0_2px_8px_-2px_rgba(245,158,11,0.6)]",
-  2: "bg-sky-400 shadow-[0_0_0_1px_rgba(56,189,248,0.4),0_2px_8px_-2px_rgba(56,189,248,0.6)]",
+// P1 = warm gold · P2 = electric blue — complementary warm vs cool contrast
+const DISC_FILL: Record<Player, string> = {
+  1: "bg-gradient-to-br from-amber-300 via-amber-400 to-amber-600 shadow-[0_0_0_1px_rgba(245,158,11,0.5),0_2px_14px_rgba(245,158,11,0.35)]",
+  2: "bg-gradient-to-br from-blue-300 via-blue-500 to-blue-700 shadow-[0_0_0_1px_rgba(59,130,246,0.5),0_2px_14px_rgba(59,130,246,0.35)]",
 };
-const DOT: Record<Player, string> = { 1: "bg-amber-400", 2: "bg-sky-400" };
-const LABEL: Record<Player, string> = { 1: "Amber", 2: "Sky" };
 
-function Disc({ value, drop }: { value: Cell; drop: boolean }) {
+const DISC_WIN: Record<Player, string> = {
+  1: "bg-gradient-to-br from-amber-200 via-amber-300 to-amber-500 shadow-[0_0_0_2px_rgba(245,158,11,0.9),0_0_22px_6px_rgba(245,158,11,0.55)]",
+  2: "bg-gradient-to-br from-blue-200 via-blue-400 to-blue-600 shadow-[0_0_0_2px_rgba(59,130,246,0.9),0_0_22px_6px_rgba(59,130,246,0.55)]",
+};
+
+const GHOST: Record<Player, string> = {
+  1: "border-2 border-amber-400/55 bg-amber-400/20",
+  2: "border-2 border-blue-400/55 bg-blue-400/20",
+};
+
+const DOT_COLOR: Record<Player, string> = {
+  1: "bg-amber-400",
+  2: "bg-blue-500",
+};
+
+/** Expanding ring colour when disc impacts the board */
+const RIPPLE: Record<Player, string> = {
+  1: "bg-amber-400/30",
+  2: "bg-blue-500/30",
+};
+
+const BORDER_ACTIVE: Record<Player, string> = {
+  1: "border-amber-500/50 bg-amber-500/[0.06]",
+  2: "border-blue-500/50 bg-blue-500/[0.06]",
+};
+
+const LABEL: Record<Player, string> = { 1: "gold", 2: "blue" };
+
+/**
+ * Empty hole: visible ring + deep recess shadow.
+ * Contrast against the navy board (#0d1929) is intentional —
+ * the ring makes each cell readable even in dark conditions.
+ */
+const EMPTY_HOLE =
+  "ring-1 ring-inset ring-white/[0.09] bg-[#040c18] shadow-[inset_0_3px_8px_rgba(0,0,0,0.82),inset_0_1px_2px_rgba(0,0,0,0.4)]";
+
+function Disc({
+  value,
+  drop,
+  isWin,
+  dimmed,
+}: {
+  value: Cell;
+  drop: boolean;
+  isWin?: boolean;
+  dimmed?: boolean;
+}) {
   const filled = value !== 0;
-  // Always the same element type (motion.span) so a cell going empty → filled
-  // is a prop update, never an unmount/remount (which can break DOM ordering).
+  const discClass = !filled
+    ? EMPTY_HOLE
+    : isWin
+      ? DISC_WIN[value as Player]
+      : DISC_FILL[value as Player];
+
   return (
-    <motion.span
-      initial={filled && drop ? { y: -220, opacity: 0.6 } : false}
-      animate={filled ? { y: 0, opacity: 1 } : { opacity: 1 }}
-      transition={{ type: "spring", stiffness: 520, damping: 30 }}
-      className={cn(
-        "size-full rounded-full",
-        filled ? DISC[value as Player] : "border border-border bg-background/60"
-      )}
-    />
+    // relative block wrapper so absolute ripple + size-full both work
+    <span className="relative block size-full">
+      <motion.span
+        initial={filled && drop ? { y: -260, opacity: 0.85, scale: 0.92 } : false}
+        animate={{
+          y: 0,
+          opacity: dimmed ? 0.22 : 1,
+          scale: isWin ? 1.07 : dimmed ? 0.87 : 1,
+        }}
+        // underdamped spring: bouncy landing feel
+        transition={{ type: "spring", stiffness: 550, damping: 22, mass: 0.9 }}
+        className={cn("block size-full rounded-full", discClass)}
+      />
+
+      {/* Impact ripple — expands outward on disc landing */}
+      <AnimatePresence>
+        {filled && drop && (
+          <motion.span
+            key="ripple"
+            initial={{ scale: 0.5, opacity: 0.6 }}
+            animate={{ scale: 2.6, opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.55, ease: [0.2, 0, 0.5, 1], delay: 0.18 }}
+            className={cn(
+              "pointer-events-none absolute inset-0 rounded-full",
+              RIPPLE[value as Player]
+            )}
+          />
+        )}
+      </AnimatePresence>
+    </span>
   );
 }
 
@@ -69,6 +140,8 @@ export function ConnectFourBoard({ roomKey, handle }: GameBoardProps) {
       handle,
     });
 
+  const [hoverCol, setHoverCol] = useState<number | null>(null);
+
   const state = session?.state;
   const status = session?.status;
   const board = state?.game.board ?? emptyBoard();
@@ -80,38 +153,69 @@ export function ConnectFourBoard({ roomKey, handle }: GameBoardProps) {
     status === "active" && myRole !== null && state?.turn === myRole;
   const canDrop = myTurn;
 
+  const winCells = useMemo(() => {
+    const w = state?.winner;
+    if (status !== "finished" || !w) return null;
+    return findWinCells(board, w);
+  }, [status, state?.winner, board]);
+
+  const hasWinner = !!(status === "finished" && state?.winner);
+
   let banner: React.ReactNode = null;
   if (!session) {
-    banner = "No game yet — start one and invite an opponent.";
+    banner = (
+      <span className="text-muted">
+        No game yet — start one and invite an opponent.
+      </span>
+    );
   } else if (status === "waiting") {
     banner =
-      myRole === 1
-        ? "Waiting for an opponent to join…"
-        : "A game is waiting for a second player.";
+      myRole === 1 ? (
+        <span className="text-muted">Waiting for an opponent to join…</span>
+      ) : (
+        <span className="text-muted">
+          A game is waiting for a second player.
+        </span>
+      );
   } else if (status === "active" && state) {
     const turnSeat = state.players[String(state.turn) as "1" | "2"];
     banner = myTurn ? (
-      <span className="text-foreground">Your turn</span>
+      <span className="flex items-center gap-2">
+        <motion.span
+          className="size-2 rounded-full bg-accent"
+          animate={{ scale: [1, 1.5, 1], opacity: [1, 0.4, 1] }}
+          transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <span className="font-semibold text-foreground">Your turn</span>
+      </span>
     ) : (
-      <>
+      <span className="text-muted">
         Waiting for{" "}
-        <span className="text-foreground">{turnSeat?.handle ?? "opponent"}</span>
-      </>
+        <span className="font-medium text-foreground">
+          {turnSeat?.handle ?? "opponent"}
+        </span>
+        …
+      </span>
     );
   } else if (status === "finished" && state) {
     if (state.winner === 0) {
-      banner = "It's a draw.";
+      banner = (
+        <span className="font-medium text-muted">It&apos;s a draw.</span>
+      );
     } else if (state.winner) {
       const won = myRole === state.winner;
+      const winnerHandle =
+        state.players[String(state.winner) as "1" | "2"]?.handle;
       banner = won ? (
-        <span className="text-foreground">You win! 🎉</span>
+        <span className="flex items-center gap-2 font-bold text-foreground">
+          <Crown className="size-4 text-primary" />
+          You win!
+        </span>
       ) : (
-        <>
-          <span className="text-foreground">
-            {state.players[String(state.winner) as "1" | "2"]?.handle}
-          </span>{" "}
+        <span className="text-muted">
+          <span className="font-semibold text-foreground">{winnerHandle}</span>{" "}
           wins
-        </>
+        </span>
       );
     }
   }
@@ -135,30 +239,33 @@ export function ConnectFourBoard({ roomKey, handle }: GameBoardProps) {
       </div>
 
       {/* Players */}
-      <div className="flex items-center justify-center gap-3 px-4 pt-4 text-sm">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 pt-4">
         <SeatChip
           player={1}
           handle={seat1?.handle}
           you={myRole === 1}
           active={status === "active" && state?.turn === 1}
+          winner={hasWinner && state?.winner === 1}
         />
-        <span className="text-xs text-subtle">vs</span>
+        <span className="text-center text-xs text-subtle">vs</span>
         <SeatChip
           player={2}
           handle={seat2?.handle}
           you={myRole === 2}
           active={status === "active" && state?.turn === 2}
+          winner={hasWinner && state?.winner === 2}
         />
       </div>
 
-      {/* Banner */}
-      <p className="px-4 pt-3 text-center text-[13px] text-muted">
-        <span translate="no">{banner}</span>
-      </p>
+      {/* Status banner */}
+      <div className="flex items-center justify-center px-4 pb-1 pt-3 text-[13px]">
+        {banner}
+      </div>
 
       {/* Board */}
-      <div className="flex justify-center p-4">
-        <div className="rounded-2xl border border-border bg-elevated p-2 shadow-inner sm:p-2.5">
+      <div className="flex justify-center px-4 pb-4 pt-2">
+        {/* Navy frame — evokes classic Connect Four blue plastic */}
+        <div className="rounded-2xl border border-border bg-[#0d1929] p-3 shadow-[0_8px_40px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-3.5">
           <div className="flex gap-1 sm:gap-1.5">
             {Array.from({ length: COLS }).map((_, col) => {
               const full = columnFull(board, col);
@@ -169,21 +276,52 @@ export function ConnectFourBoard({ roomKey, handle }: GameBoardProps) {
                   type="button"
                   disabled={!clickable}
                   onClick={() => move({ col })}
+                  onMouseEnter={() => setHoverCol(col)}
+                  onMouseLeave={() => setHoverCol(null)}
                   aria-label={`Drop in column ${col + 1}`}
                   className={cn(
-                    "group flex flex-col gap-1 rounded-lg px-0.5 py-0.5 transition-colors sm:gap-1.5",
+                    "group flex flex-col items-center gap-1 rounded-xl px-0.5 pb-0.5 pt-1 transition-colors duration-150 sm:gap-1.5",
                     clickable
-                      ? "cursor-pointer hover:bg-primary/10"
+                      ? "cursor-pointer hover:bg-white/[0.05]"
                       : "cursor-default"
                   )}
                 >
+                  {/* Ghost disc preview above column on hover */}
+                  <span className="flex h-4 w-full items-center justify-center">
+                    <AnimatePresence>
+                      {hoverCol === col && clickable && myRole && (
+                        <motion.span
+                          key="ghost"
+                          initial={{ opacity: 0, scale: 0.3, y: -8 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.3, y: -8 }}
+                          transition={{ duration: 0.1, ease: "easeOut" }}
+                          className={cn("size-3 rounded-full", GHOST[myRole])}
+                        />
+                      )}
+                    </AnimatePresence>
+                  </span>
+
+                  {/* Cells — block span so size-full fills correctly */}
                   {Array.from({ length: ROWS }).map((__, row) => {
                     const value = cellAt(board, row, col);
+                    const cellIndex = row * COLS + col;
                     const isLast =
-                      state?.game.lastRow === row && state?.game.lastCol === col;
+                      state?.game.lastRow === row &&
+                      state?.game.lastCol === col;
+                    const isWin = winCells?.has(cellIndex) ?? false;
+                    const dimmed = hasWinner && value !== 0 && !isWin;
                     return (
-                      <span key={row} className="size-8 sm:size-9 md:size-10">
-                        <Disc value={value} drop={isLast} />
+                      <span
+                        key={row}
+                        className="block size-8 sm:size-9 md:size-10"
+                      >
+                        <Disc
+                          value={value}
+                          drop={isLast}
+                          isWin={isWin}
+                          dimmed={dimmed}
+                        />
                       </span>
                     );
                   })}
@@ -233,25 +371,59 @@ function SeatChip({
   handle,
   you,
   active,
+  winner,
 }: {
   player: Player;
   handle?: string;
   you: boolean;
   active: boolean;
+  winner: boolean;
 }) {
   return (
-    <span
+    <div
       className={cn(
-        "flex items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-colors",
-        active ? "border-border-strong bg-white/[0.04]" : "border-border"
+        "relative flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2 transition-all duration-300",
+        active ? BORDER_ACTIVE[player] : "border-border bg-transparent"
       )}
     >
-      <span className={cn("size-2.5 rounded-full", DOT[player])} />
-      <span className="max-w-[9rem] truncate text-[13px]">
-        {handle ?? "open seat"}
-      </span>
-      {you && <span className="text-[10px] text-muted">(you)</span>}
-      <span className="terminal-badge text-subtle">{LABEL[player]}</span>
-    </span>
+      {/* Radiating pulse when it's this player's turn */}
+      <div className="relative shrink-0">
+        <span className={cn("block size-2 rounded-full", DOT_COLOR[player])} />
+        {active && (
+          <motion.span
+            className={cn("absolute inset-0 rounded-full", DOT_COLOR[player])}
+            animate={{ scale: [1, 3], opacity: [0.6, 0] }}
+            transition={{ duration: 1.4, repeat: Infinity, ease: "easeOut" }}
+          />
+        )}
+      </div>
+
+      {/* Name + colour label */}
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span
+          className={cn(
+            "truncate text-[12px] font-medium leading-none",
+            handle
+              ? active
+                ? "text-foreground"
+                : "text-muted"
+              : "italic text-subtle"
+          )}
+        >
+          {handle ?? "open seat"}
+        </span>
+        <span className="terminal-badge leading-tight text-subtle">
+          {LABEL[player]}
+        </span>
+      </div>
+
+      {winner && <Crown className="ml-1 size-3 shrink-0 text-primary" />}
+
+      {you && (
+        <span className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-background px-1 py-px font-mono text-[9px] leading-tight text-muted">
+          you
+        </span>
+      )}
+    </div>
   );
 }

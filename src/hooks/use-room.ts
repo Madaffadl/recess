@@ -47,12 +47,16 @@ export type RoomState = {
   selfUid: string | null;
   /** Set when the host kicked this user or closed the room. */
   removed: RemovalReason;
+  /** True once a `game_started` broadcast is received (used by fullpage games). */
+  gameStarted: boolean;
   sendMessage: (text: string) => void;
   notifyTyping: () => void;
   /** Host action: remove a specific connection by its presence key. */
   kick: (key: string) => void;
   /** Host action: tell every present client the room is closing. */
   closeForAll: () => void;
+  /** Signal all present clients to navigate into the fullpage game. */
+  notifyGameStarted: () => void;
 };
 
 /**
@@ -85,6 +89,7 @@ export function useRoom({
   const [selfKey, setSelfKey] = useState<string | null>(null);
   const [selfUid, setSelfUid] = useState<string | null>(null);
   const [removed, setRemoved] = useState<RemovalReason>(null);
+  const [gameStarted, setGameStarted] = useState(false);
 
   const pushActivity = (events: Omit<ActivityEvent, "id">[]) => {
     if (!events.length) return;
@@ -184,6 +189,9 @@ export function useRoom({
         })
         .on("broadcast", { event: "room_closed" }, () => {
           setRemoved("closed");
+        })
+        .on("broadcast", { event: "game_started" }, () => {
+          setGameStarted(true);
         })
         .on("presence", { event: "sync" }, () => {
           const state = channel.presenceState<{ user?: string; uid?: string }>();
@@ -318,6 +326,14 @@ export function useRoom({
     });
   }, []);
 
+  const notifyGameStarted = useCallback(() => {
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "game_started",
+      payload: {},
+    });
+  }, []);
+
   return {
     messages,
     presentHandles,
@@ -329,9 +345,11 @@ export function useRoom({
     selfKey,
     selfUid,
     removed,
+    gameStarted,
     sendMessage,
     notifyTyping,
     kick,
     closeForAll,
+    notifyGameStarted,
   };
 }

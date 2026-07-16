@@ -75,7 +75,7 @@ export default function RootLayout({
           <SiteBackground />
           <div className="relative flex min-h-screen flex-col">
             <Navbar />
-            <div className="flex flex-1">
+            <div className="flex flex-1 flex-col lg:flex-row">
               <main className="min-w-0 flex-1">{children}</main>
               <LoungeDock />
             </div>
