@@ -5,6 +5,6 @@ import { MILITARY_ZONE_ID } from "./logic";
 export const militaryZone: GameModule = {
   id: MILITARY_ZONE_ID,
   minPlayers: 2,
-  maxPlayers: 4,
+  maxPlayers: 8,
   Board: MilitaryZoneBoard,
 };

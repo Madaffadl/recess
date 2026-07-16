@@ -63,7 +63,7 @@ export type MilitaryZoneSeat = { id: string; handle: string } | null;
 export type MilitaryZoneState = {
   players: Record<string, MilitaryZoneSeat>;
   hostId: string;
-  numPlayers: 2 | 3 | 4;
+  numPlayers: number;
   turn: number;
   startTurn: number;
   winner: number | null;

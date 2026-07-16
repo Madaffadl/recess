@@ -74,11 +74,9 @@ const T = {
   // Markers
   hit:       "#E03068",     // vivid pink-red
   miss:      "#8EA4B8",     // muted blue-gray
-  // Player accents
-  p1:        "#E03068",     // pink — player 1
-  p2:        "#3D6FA0",     // steel blue — player 2
-  p3:        "#2E8B57",     // sea green — player 3
-  p4:        "#B8860B",     // dark goldenrod — player 4
+  // Player accents (P1 / P2 also used as primary / secondary UI accents)
+  p1:        "#E03068",     // primary accent — vivid pink-red
+  p2:        "#3D6FA0",     // secondary accent — steel blue
   // Text
   text:      "text-[#1A2D3D]",
   textVal:   "#1A2D3D",
@@ -86,19 +84,36 @@ const T = {
   mutedVal:  "#7090A8",
 } as const;
 
-const PLAYER_COLORS: Record<number, string> = {
-  1: T.p1,
-  2: T.p2,
-  3: T.p3,
-  4: T.p4,
-};
+// 8-slot palette — wraps via modulo for any player count
+const PLAYER_PALETTE = [
+  "#E03068",  // 1: vivid pink-red
+  "#3D6FA0",  // 2: steel blue
+  "#2E8B57",  // 3: sea green
+  "#B8860B",  // 4: dark goldenrod
+  "#7B3F9E",  // 5: amethyst
+  "#C0392B",  // 6: crimson
+  "#1A7A8A",  // 7: dark teal
+  "#D4522A",  // 8: terracotta
+];
 
-const SHIP_FILTER: Record<number, string> = {
-  1: "drop-shadow(0 2px 4px rgba(224, 48, 104, 0.30)) drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
-  2: "hue-rotate(25deg) brightness(0.88) drop-shadow(0 2px 4px rgba(61, 111, 160, 0.35)) drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
-  3: "hue-rotate(90deg) brightness(0.85) drop-shadow(0 2px 4px rgba(46, 139, 87, 0.35)) drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
-  4: "hue-rotate(200deg) brightness(0.9) drop-shadow(0 2px 4px rgba(184, 134, 11, 0.35)) drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
-};
+const PLAYER_FILTER_LIST = [
+  "drop-shadow(0 2px 4px rgba(224, 48, 104, 0.30)) drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
+  "hue-rotate(25deg) brightness(0.88) drop-shadow(0 2px 4px rgba(61, 111, 160, 0.35)) drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
+  "hue-rotate(90deg) brightness(0.85) drop-shadow(0 2px 4px rgba(46, 139, 87, 0.35)) drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
+  "hue-rotate(200deg) brightness(0.9) drop-shadow(0 2px 4px rgba(184, 134, 11, 0.35)) drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
+  "hue-rotate(270deg) brightness(0.85) drop-shadow(0 2px 4px rgba(123, 63, 158, 0.35)) drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
+  "hue-rotate(345deg) brightness(0.88) drop-shadow(0 2px 4px rgba(192, 57, 43, 0.35)) drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
+  "hue-rotate(170deg) brightness(0.82) drop-shadow(0 2px 4px rgba(26, 122, 138, 0.35)) drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
+  "hue-rotate(15deg) brightness(0.87) drop-shadow(0 2px 4px rgba(212, 82, 42, 0.35)) drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
+];
+
+function playerColor(n: number): string {
+  return PLAYER_PALETTE[(n - 1) % PLAYER_PALETTE.length];
+}
+
+function playerFilter(n: number): string {
+  return PLAYER_FILTER_LIST[(n - 1) % PLAYER_FILTER_LIST.length];
+}
 
 const CELL_SIZE  = 30;
 const LABEL_SIZE = 18;
@@ -122,7 +137,7 @@ function shipImgStyle(
     userSelect:      "none",
     zIndex:          2,
     opacity,
-    filter:          player ? SHIP_FILTER[player] : undefined,
+    filter:          player ? playerFilter(player) : undefined,
     transition:      "opacity 0.3s, filter 0.3s",
   };
 }
@@ -152,7 +167,7 @@ function CopyLinkButton() {
 function SeatChip({
   player, handle, you, active, eliminated,
 }: { player: number; handle?: string; you: boolean; active: boolean; eliminated?: boolean }) {
-  const accent = PLAYER_COLORS[player] ?? T.p1;
+  const accent = playerColor(player);
   return (
     <span
       className={cn(
@@ -455,7 +470,7 @@ function BattleGrid({
           style={{
             ...shipImgStyle(ghost.r, ghost.c, ghost.size, ghost.orient, undefined, ghostValid ? 0.55 : 0.35),
             filter: ghostValid
-              ? `${SHIP_FILTER[shipPlayer ?? 1]} opacity(0.65)`
+              ? `${playerFilter(shipPlayer ?? 1)} opacity(0.65)`
               : "hue-rotate(330deg) saturate(1.5) opacity(0.45)",
           }}
         />
@@ -466,8 +481,8 @@ function BattleGrid({
         const isSunk = "sunk" in ship && ship.sunk;
         const player = "player" in ship ? ship.player : (shipPlayer ?? 1);
         const filter = isSunk
-          ? `${SHIP_FILTER[player]} grayscale(0.55) opacity(0.55)`
-          : SHIP_FILTER[player];
+          ? `${playerFilter(player)} grayscale(0.55) opacity(0.55)`
+          : playerFilter(player);
         return (
           <img
             key={ship.id}
@@ -708,8 +723,6 @@ function PlacementPhase({
 
 // ─── Battle phase ─────────────────────────────────────────────────────────────
 
-const TURN_SECONDS = 10;
-
 function BattlePhase({
   myRole, game, myTurn, activeTurn, numPlayers, onFire, players,
 }: {
@@ -721,6 +734,8 @@ function BattlePhase({
   onFire:     (r: number, c: number, target: number) => void;
   players:    Record<string, MilitaryZoneSeat>;
 }) {
+  const turnSeconds   = numPlayers * 5;
+
   const activePlayers = useMemo(() =>
     Array.from({ length: numPlayers }, (_, i) => i + 1)
       .filter((p) => p !== myRole && !(game.eliminated?.[String(p)] ?? false)),
@@ -796,11 +811,11 @@ function BattlePhase({
   const sunkCount = game.ships.filter((s) => s.player === selectedTarget && s.sunk).length;
 
   // ── Countdown ──────────────────────────────────────────────────────────────
-  const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
+  const [timeLeft, setTimeLeft] = useState(turnSeconds);
   const autoFiredRef = useRef(false);
 
   useEffect(() => {
-    setTimeLeft(TURN_SECONDS);
+    setTimeLeft(turnSeconds);
     autoFiredRef.current = false;
   }, [activeTurn]);
 
@@ -833,7 +848,7 @@ function BattlePhase({
     }
   }, [timeLeft, myTurn, onFire]);
 
-  const timerPct    = (timeLeft / TURN_SECONDS) * 100;
+  const timerPct    = (timeLeft / turnSeconds) * 100;
   const timerColor  = timeLeft > 6 ? T.p2 : timeLeft > 3 ? "#D4882A" : T.p1;
   const timerUrgent = timeLeft <= 3;
   // Carousel constants — all cards stay in DOM; depth drives position
@@ -911,11 +926,11 @@ function BattlePhase({
                       : "border-transparent bg-transparent opacity-50 hover:opacity-80"
                   )}
                   style={selectedTarget === p ? {
-                    borderColor: PLAYER_COLORS[p],
-                    boxShadow:   `0 0 0 2px ${PLAYER_COLORS[p]}22`,
+                    borderColor: playerColor(p),
+                    boxShadow:   `0 0 0 2px ${playerColor(p)}22`,
                   } : {}}
                 >
-                  <span className="size-2 rounded-full" style={{ background: PLAYER_COLORS[p] }} />
+                  <span className="size-2 rounded-full" style={{ background: playerColor(p) }} />
                   <span className="max-w-[7rem] truncate">{pHandle}</span>
                 </button>
               );
@@ -931,7 +946,7 @@ function BattlePhase({
         <div className="flex flex-col items-center gap-2">
           <div
             className="w-full rounded-t-xl px-3 py-1.5 text-center font-mono text-[11px] tracking-widest text-white"
-            style={{ background: PLAYER_COLORS[myRole] ?? T.p1 }}
+            style={{ background: playerColor(myRole) }}
           >
             YOUR FLEET · P{myRole}
           </div>
@@ -951,7 +966,7 @@ function BattlePhase({
               const pIdx     = allTargets.indexOf(p);
               const depth    = (pIdx - activeIdx + allTargets.length) % allTargets.length;
               const isActive = depth === 0;
-              const pColor   = PLAYER_COLORS[p] ?? T.p2;
+              const pColor   = playerColor(p);
               const pHandle  = players[String(p)]?.handle ?? `P${p}`;
               const pShots   = isActive ? sharedShots : mergeIncomingShots(game.shots ?? {}, p, numPlayers);
               const pSunk    = isActive ? enemyShips  : game.ships.filter((s) => s.player === p && s.sunk);
@@ -1030,7 +1045,7 @@ export function MilitaryZoneBoard({ roomKey, handle }: GameBoardProps) {
   const { session, myRole, ready, busy, error, join, move, rematch } =
     useMilitaryZoneGame({ roomKey, handle });
 
-  const [numPlayersChoice, setNumPlayersChoice] = useState<2 | 3 | 4>(2);
+  const [numPlayersChoice, setNumPlayersChoice] = useState<number>(2);
 
   const state      = session?.state;
   const status     = session?.status;
@@ -1159,7 +1174,7 @@ export function MilitaryZoneBoard({ roomKey, handle }: GameBoardProps) {
         ) : !session ? (
           <div className="py-8 flex flex-col items-center gap-4">
             <div className="flex items-center gap-2">
-              {([2, 3, 4] as const).map((n) => (
+              {[2, 3, 4, 5, 6, 7, 8].map((n) => (
                 <button
                   key={n}
                   type="button"
