@@ -64,13 +64,13 @@ export const GAMES: Game[] = [
   },
   {
     id: "military-zone",
-    name: "Gunjin Shōgi",
+    name: "Military Zone",
     category: "Puzzle",
     players: 0,
     emoji: "🎖️",
     icon: Shield,
     isNew: true,
-    blurb: "Deploy hidden forces, outmaneuver your opponent, capture their HQ.",
+    blurb: "Place your fleet in secret, then hunt down every enemy ship before they find yours.",
   },
   {
     id: "geo-challenge",
