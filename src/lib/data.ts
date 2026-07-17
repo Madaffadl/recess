@@ -68,7 +68,8 @@ export const GAMES: Game[] = [
     players: 128,
     emoji: "🌎",
     icon: Globe2,
-    blurb: "Guess the place from the clues before the map runs out.",
+    isNew: true,
+    blurb: "Explore real street view, then drop a pin. Score by how close you guess.",
   },
   {
     id: "draw-together",
