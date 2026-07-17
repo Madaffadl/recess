@@ -723,6 +723,10 @@ function PlacementPhase({
 
 // ─── Battle phase ─────────────────────────────────────────────────────────────
 
+// Mini-grid scale for enemy cards (reduces 318 px grid to ~191 px visual)
+const MINI_SCALE = 0.60;
+const MINI_SIZE  = Math.round(TOTAL * MINI_SCALE); // 191 px
+
 function BattlePhase({
   myRole, game, myTurn, activeTurn, numPlayers, onFire, players,
 }: {
@@ -734,7 +738,7 @@ function BattlePhase({
   onFire:     (r: number, c: number, target: number) => void;
   players:    Record<string, MilitaryZoneSeat>;
 }) {
-  const turnSeconds   = numPlayers * 5;
+  const turnSeconds = numPlayers * 5;
 
   const activePlayers = useMemo(() =>
     Array.from({ length: numPlayers }, (_, i) => i + 1)
@@ -746,78 +750,77 @@ function BattlePhase({
     () => activePlayers[0] ?? (myRole === 1 ? 2 : 1)
   );
 
-  // Auto-switch target when it gets eliminated
   useEffect(() => {
-    if (!activePlayers.includes(selectedTarget) && activePlayers.length > 0) {
+    if (!activePlayers.includes(selectedTarget) && activePlayers.length > 0)
       setSelectedTarget(activePlayers[0]);
-    }
   }, [activePlayers, selectedTarget]);
 
-  const myShips     = game.ships.filter((s) => s.player === myRole);
-  const enemyShips  = game.ships.filter((s) => s.player === selectedTarget && s.sunk);
-  // Shared attack grid: all non-target players' shots merged (same view for every attacker)
-  const sharedShots = mergeIncomingShots(game.shots ?? {}, selectedTarget, numPlayers);
-  const oppShots    = mergeIncomingShots(game.shots ?? {}, myRole, numPlayers);
+  const myShips  = game.ships.filter((s) => s.player === myRole);
+  const oppShots = mergeIncomingShots(game.shots ?? {}, myRole, numPlayers);
 
-  // SFX + flash on new shot
+  // ── Flash on last shot ──────────────────────────────────────────────────────
   const lastShotRef = useRef(game.lastShot);
-  const [flashCell, setFlashCell] = useState<{ r: number; c: number } | null>(null);
-  const selectedTargetRef = useRef(selectedTarget);
-  selectedTargetRef.current = selectedTarget;
+  const [flashInfo, setFlashInfo] =
+    useState<{ target: number; r: number; c: number } | null>(null);
 
   useEffect(() => {
     if (!game.lastShot || game.lastShot === lastShotRef.current) return;
     lastShotRef.current = game.lastShot;
-    const { r, c, result, sunkId, by, target } = game.lastShot;
+    const { r, c, result, sunkId, target } = game.lastShot;
     if (sunkId)                playSunk();
     else if (result === "hit") playHit();
     else                       playMiss();
-    // Flash only when I fired at my currently-viewed target
-    if (by === myRole && target === selectedTargetRef.current) {
-      setFlashCell({ r, c });
-      setTimeout(() => setFlashCell(null), 800);
-    }
-  }, [game.lastShot, myRole]);
+    setFlashInfo({ target, r, c });
+    setTimeout(() => setFlashInfo(null), 800);
+  }, [game.lastShot]);
 
-  // Hover + sonar ping
-  const [hoverCell, setHoverCell] = useState<{ r: number; c: number } | null>(null);
+  // ── Turn-start ping + snackbar ──────────────────────────────────────────────
+  const [showTurnSnack, setShowTurnSnack] = useState(false);
+
+  const prevMyTurnRef = useRef(myTurn);
+  useEffect(() => {
+    if (myTurn && !prevMyTurnRef.current) {
+      playPing();
+      setShowTurnSnack(true);
+      const t = setTimeout(() => setShowTurnSnack(false), 3000);
+      return () => clearTimeout(t);
+    }
+    prevMyTurnRef.current = myTurn;
+  }, [myTurn]);
+
+  // ── Hover / sonar ping ──────────────────────────────────────────────────────
+  const [hoverTarget, setHoverTarget] = useState<number | null>(null);
+  const [hoverCell,   setHoverCell]   = useState<{ r: number; c: number } | null>(null);
   const lastPingRef = useRef(0);
 
-  function handleHover(r: number | null, c: number | null) {
-    if (r === null || c === null) { setHoverCell(null); return; }
-    setHoverCell({ r, c });
-    if (!sharedShots[r]?.[c] && myTurn) {
+  function handleHover(target: number, r: number | null, c: number | null) {
+    if (r === null || c === null) { setHoverTarget(null); setHoverCell(null); return; }
+    const tShots = mergeIncomingShots(game.shots ?? {}, target, numPlayers);
+    if (!tShots[r]?.[c] && myTurn) {
       const now = Date.now();
       if (now - lastPingRef.current > 130) { playPing(); lastPingRef.current = now; }
     }
+    setHoverTarget(target);
+    setHoverCell({ r, c });
   }
 
-  const highlightCells = useMemo(() => {
-    if (!hoverCell || !myTurn) return undefined;
-    const { r, c } = hoverCell;
-    if (sharedShots[r]?.[c]) return undefined;
-    return new Set([`${r},${c}`]);
-  }, [hoverCell, myTurn, sharedShots]);
-
-  function handleFire(r: number, c: number) {
-    if (!myTurn || sharedShots[r]?.[c]) return;
+  function handleFire(r: number, c: number, target: number) {
+    if (!myTurn) return;
+    const tShots = mergeIncomingShots(game.shots ?? {}, target, numPlayers);
+    if (tShots[r]?.[c]) return;
     playFire();
-    onFire(r, c, selectedTarget);
+    setSelectedTarget(target);
+    onFire(r, c, target);
   }
 
-  // Stats — aggregate across all attackers on selectedTarget
-  const hits      = sharedShots.flat().filter((s) => s === "hit").length;
-  const misses    = sharedShots.flat().filter((s) => s === "miss").length;
-  const sunkCount = game.ships.filter((s) => s.player === selectedTarget && s.sunk).length;
-
-  // ── Countdown ──────────────────────────────────────────────────────────────
+  // ── Countdown ───────────────────────────────────────────────────────────────
   const [timeLeft, setTimeLeft] = useState(turnSeconds);
   const autoFiredRef = useRef(false);
 
   useEffect(() => {
     setTimeLeft(turnSeconds);
     autoFiredRef.current = false;
-  }, [activeTurn]);
+  }, [activeTurn, turnSeconds]);
 
   useEffect(() => {
     if (timeLeft <= 0) return;
@@ -825,10 +828,12 @@ function BattlePhase({
     return () => clearTimeout(id);
   }, [timeLeft]);
 
-  const myShotsRef = useRef(sharedShots);
-  myShotsRef.current = sharedShots;
-  const activePlayersRef = useRef(activePlayers);
-  activePlayersRef.current = activePlayers;
+  const activePlayersRef    = useRef(activePlayers);
+  activePlayersRef.current  = activePlayers;
+  const selectedTargetRef   = useRef(selectedTarget);
+  selectedTargetRef.current = selectedTarget;
+  const gameRef             = useRef(game);
+  gameRef.current           = game;
 
   useEffect(() => {
     if (timeLeft > 0 || !myTurn || autoFiredRef.current) return;
@@ -837,47 +842,64 @@ function BattlePhase({
       ? selectedTargetRef.current
       : activePlayersRef.current[0];
     if (target === undefined) return;
+    const shots = mergeIncomingShots(gameRef.current.shots ?? {}, target, numPlayers);
     const available: [number, number][] = [];
     for (let r = 0; r < GRID_SIZE; r++)
       for (let c = 0; c < GRID_SIZE; c++)
-        if (!myShotsRef.current[r]?.[c]) available.push([r, c]);
+        if (!shots[r]?.[c]) available.push([r, c]);
     if (available.length > 0) {
       const [r, c] = available[Math.floor(Math.random() * available.length)];
       playFire();
       onFire(r, c, target);
     }
-  }, [timeLeft, myTurn, onFire]);
+  }, [timeLeft, myTurn, onFire, numPlayers]);
 
   const timerPct    = (timeLeft / turnSeconds) * 100;
   const timerColor  = timeLeft > 6 ? T.p2 : timeLeft > 3 ? "#D4882A" : T.p1;
   const timerUrgent = timeLeft <= 3;
-  // Carousel constants — all cards stay in DOM; depth drives position
-  const PEEK_X     = 15;
-  const PEEK_Y     = 35;
-  const CARD_W     = TOTAL + 18;
-  const CARD_H     = TOTAL + 45;   // header (~29px) + grid-container padding (16px)
-  const allTargets = activePlayers;
-  const numBack    = Math.min(allTargets.length - 1, 2);
-  const activeIdx  = allTargets.indexOf(selectedTarget);
 
   return (
-    <div className="flex flex-col items-center gap-4 w-full">
+    <div className="flex flex-col gap-4 w-full relative">
 
-      {/* Stats row */}
-      <div className={cn("flex items-center gap-6 rounded-xl border px-6 py-2.5 bg-white", T.border)}>
-        <Stat label="HITS"   value={hits}             color={T.hit} />
-        <Divider />
-        <Stat label="MISSES" value={misses}            color={T.mutedVal} />
-        <Divider />
-        <Stat label="SUNK"   value={`${sunkCount}/5`} color={T.p2} />
-      </div>
+      {/* ── Turn snackbar ────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showTurnSnack && (
+          <motion.div
+            key="turn-snack"
+            initial={{ opacity: 0, y: -16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0,   scale: 1 }}
+            exit={{    opacity: 0, y: -16, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="absolute top-0 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-[11px] tracking-widest text-white shadow-lg pointer-events-none"
+            style={{ background: T.p1 }}
+          >
+            <span>⚔</span>
+            <span>YOUR TURN — PICK A TARGET</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Countdown bar */}
-      <div className={cn("w-full max-w-[318px] rounded-xl border px-3 py-2.5 bg-white", T.border)}>
+      {/* ── Turn / timer bar ─────────────────────────────────────────────── */}
+      <div
+        className={cn("rounded-xl border px-3 py-2.5 bg-white transition-all duration-300", T.border)}
+        style={myTurn ? { borderColor: T.p1, boxShadow: `0 0 0 4px ${T.p1}18` } : {}}
+      >
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[9px] font-mono tracking-widest" style={{ color: T.mutedVal }}>
-            {myTurn ? "YOUR TURN" : `${players[String(activeTurn)]?.handle ?? `P${activeTurn}`} (P${activeTurn})'S TURN`}
-          </span>
+          {myTurn ? (
+            <motion.span
+              key="your-turn"
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="text-[9px] font-mono tracking-widest font-bold animate-pulse"
+              style={{ color: T.p1 }}
+            >
+              ⚔ YOUR TURN — PICK A TARGET
+            </motion.span>
+          ) : (
+            <span className="text-[9px] font-mono tracking-widest" style={{ color: T.mutedVal }}>
+              {`${players[String(activeTurn)]?.handle ?? `P${activeTurn}`} (P${activeTurn})'S TURN`}
+            </span>
+          )}
           <motion.span
             key={timeLeft}
             initial={{ scale: timerUrgent ? 1.35 : 1 }}
@@ -904,46 +926,11 @@ function BattlePhase({
         )}
       </div>
 
-      {/* Target selector (shown for 3+ players only) */}
-      {numPlayers > 2 && (
-        <div className={cn("flex items-center gap-3 rounded-xl border px-4 py-2 bg-white", T.border)}>
-          <span className="text-[9px] font-mono tracking-widest shrink-0" style={{ color: T.mutedVal }}>
-            TARGET:
-          </span>
-          <div className="flex gap-2 flex-wrap">
-            {activePlayers.map((p) => {
-              const pHandle = players[String(p)]?.handle ?? `P${p}`;
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setSelectedTarget(p)}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-mono transition-all",
-                    T.text,
-                    selectedTarget === p
-                      ? "bg-white"
-                      : "border-transparent bg-transparent opacity-50 hover:opacity-80"
-                  )}
-                  style={selectedTarget === p ? {
-                    borderColor: playerColor(p),
-                    boxShadow:   `0 0 0 2px ${playerColor(p)}22`,
-                  } : {}}
-                >
-                  <span className="size-2 rounded-full" style={{ background: playerColor(p) }} />
-                  <span className="max-w-[7rem] truncate">{pHandle}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Dual grids */}
-      <div className="flex flex-col gap-5 sm:flex-row sm:gap-6">
+      {/* ── Grids ──────────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start w-full">
 
         {/* MY FLEET */}
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-2 shrink-0">
           <div
             className="w-full rounded-t-xl px-3 py-1.5 text-center font-mono text-[11px] tracking-widest text-white"
             style={{ background: playerColor(myRole) }}
@@ -956,72 +943,109 @@ function BattlePhase({
           <ShipList sunkShips={myShips.filter((s) => s.sunk)} label="SHIPYARD" />
         </div>
 
-        {/* ENEMY WATERS — true carousel: all cards always in DOM */}
-        <div className="flex flex-col items-center gap-2">
+        {/* ENEMY WATERS — open grid of mini-cards */}
+        <div className="flex-1 min-w-0">
           <div
-            className="relative"
-            style={{ width: CARD_W, minHeight: CARD_H + numBack * PEEK_Y }}
+            className="grid gap-3"
+            style={{ gridTemplateColumns: `repeat(auto-fill, ${MINI_SIZE + 18}px)` }}
           >
-            {allTargets.map((p) => {
-              const pIdx     = allTargets.indexOf(p);
-              const depth    = (pIdx - activeIdx + allTargets.length) % allTargets.length;
-              const isActive = depth === 0;
-              const pColor   = playerColor(p);
-              const pHandle  = players[String(p)]?.handle ?? `P${p}`;
-              const pShots   = isActive ? sharedShots : mergeIncomingShots(game.shots ?? {}, p, numPlayers);
-              const pSunk    = isActive ? enemyShips  : game.ships.filter((s) => s.player === p && s.sunk);
+            {activePlayers.map((p) => {
+              const pHandle   = players[String(p)]?.handle ?? `P${p}`;
+              const pColor    = playerColor(p);
+              const pShots    = mergeIncomingShots(game.shots ?? {}, p, numPlayers);
+              const pSunk     = game.ships.filter((s) => s.player === p && s.sunk);
+              const pHits     = pShots.flat().filter((s) => s === "hit").length;
+              const pMisses   = pShots.flat().filter((s) => s === "miss").length;
+              const untouched = pShots.flat().every((s) => s === null);
+              const isSelected = selectedTarget === p;
+              // Per-card highlight: only show for the cell being hovered on this grid
+              const highlight = (() => {
+                if (!myTurn || hoverTarget !== p || !hoverCell) return undefined;
+                if (pShots[hoverCell.r]?.[hoverCell.c]) return undefined;
+                return new Set([`${hoverCell.r},${hoverCell.c}`]);
+              })();
+
               return (
-                <motion.div
+                <div
                   key={p}
-                  className="absolute overflow-hidden rounded-xl"
-                  animate={{
-                    x:       depth * PEEK_X,
-                    y:       depth * PEEK_Y,
-                    scale:   1 - depth * 0.06,
-                    opacity: isActive ? 1 : 0.55 - (depth - 1) * 0.10,
-                  }}
-                  transition={{ type: "spring", stiffness: 320, damping: 26 }}
+                  className="flex flex-col rounded-xl overflow-hidden border transition-all duration-200"
                   style={{
-                    width:  CARD_W,
-                    zIndex: allTargets.length - depth,
-                    cursor: isActive ? "default" : "pointer",
+                    borderColor: myTurn && isSelected ? T.p1 : isSelected ? pColor : "#D0DCEA",
+                    boxShadow:   myTurn && isSelected
+                      ? `0 0 0 3px ${T.p1}28`
+                      : isSelected ? `0 0 0 2px ${pColor}22` : "none",
                   }}
-                  onClick={isActive ? undefined : () => setSelectedTarget(p)}
+                  onClick={() => setSelectedTarget(p)}
                 >
+                  {/* Card header */}
                   <div
-                    className="px-3 py-1.5 text-center font-mono text-[11px] tracking-widest text-white transition-colors duration-300"
-                    style={{ background: isActive && myTurn ? T.p1 : pColor }}
+                    className="px-2 py-1.5 flex items-center justify-between font-mono text-[10px] tracking-widest text-white shrink-0"
+                    style={{ background: myTurn && isSelected ? T.p1 : pColor }}
                   >
-                    {isActive && myTurn
-                      ? `▸ FIRE AT ${pHandle}`
-                      : `${pHandle}'s Waters`}
+                    <span className="truncate max-w-[8rem]">
+                      {myTurn && isSelected ? `▸ ${pHandle}` : pHandle}
+                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                      {untouched && (
+                        <span className="rounded px-1 py-0.5 text-[8px] bg-white/25 tracking-wider">
+                          UNCHARTED
+                        </span>
+                      )}
+                      {pSunk.length > 0 && (
+                        <span className="text-[8px] opacity-80">{pSunk.length}/5 ☠</span>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Scaled battle grid */}
                   <div
-                    className="border border-t-0 p-2 bg-white"
-                    style={{
-                      borderColor:   isActive && myTurn ? T.p1 : "#D0DCEA",
-                      boxShadow:     isActive && myTurn ? `0 0 0 2px ${T.p1}22` : "none",
-                      pointerEvents: isActive ? "auto" : "none",
-                    }}
+                    className="bg-white overflow-hidden shrink-0"
+                    style={{ width: MINI_SIZE + 12, height: MINI_SIZE + 12, padding: 6 }}
+                    onMouseLeave={() => handleHover(p, null, null)}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <BattleGrid
-                      mode="enemy"
-                      ships={pSunk}
-                      shots={pShots}
-                      interactive={isActive && myTurn}
-                      highlightCells={isActive ? highlightCells : undefined}
-                      flashCell={isActive ? flashCell : undefined}
-                      shipPlayer={p}
-                      onCellClick={isActive ? handleFire : undefined}
-                      onCellHover={isActive ? handleHover : undefined}
-                    />
+                    <div
+                      style={{
+                        transform:       `scale(${MINI_SCALE})`,
+                        transformOrigin: "top left",
+                        width:           TOTAL,
+                        height:          TOTAL,
+                      }}
+                    >
+                      <BattleGrid
+                        mode="enemy"
+                        ships={pSunk}
+                        shots={pShots}
+                        interactive={myTurn}
+                        highlightCells={highlight}
+                        flashCell={flashInfo?.target === p ? { r: flashInfo.r, c: flashInfo.c } : null}
+                        shipPlayer={p}
+                        onCellClick={myTurn ? (r, c) => handleFire(r, c, p) : undefined}
+                        onCellHover={(r, c) => handleHover(p, r, c)}
+                      />
+                    </div>
                   </div>
-                </motion.div>
+
+                  {/* Footer stats */}
+                  {(pHits + pMisses) > 0 && (
+                    <div
+                      className="px-2 py-1 flex gap-3 border-t shrink-0"
+                      style={{ borderColor: "#E8EEF5", background: "#F8FBFE" }}
+                    >
+                      <span className="text-[9px] font-mono" style={{ color: T.hit }}>
+                        {pHits} hit{pHits !== 1 ? "s" : ""}
+                      </span>
+                      <span className="text-[9px] font-mono" style={{ color: T.mutedVal }}>
+                        {pMisses} miss{pMisses !== 1 ? "es" : ""}
+                      </span>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
-          <ShipList sunkShips={enemyShips} label="GRAVEYARD" />
         </div>
+
       </div>
     </div>
   );
