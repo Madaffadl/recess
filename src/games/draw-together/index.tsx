@@ -3,6 +3,7 @@
 import type { GameModule, GameBoardProps } from "@/games/types";
 import { DRAW_TOGETHER_ID } from "./logic";
 import { DrawTogetherBoard } from "./board";
+import { DrawTogetherLobby } from "./lobby";
 
 // Adapter: satisfies GameBoardProps while providing a no-op onExit.
 // In practice, fullpage games never render Board inline — the game page
@@ -16,5 +17,6 @@ export const drawTogether: GameModule = {
   minPlayers: 2,
   maxPlayers: 8,
   Board: DrawTogetherBoardAdapter,
+  Lobby: DrawTogetherLobby,
   renderMode: "fullpage",
 };
