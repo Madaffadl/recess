@@ -4,6 +4,7 @@ import { wordSnake } from "./word-snake";
 import { drawTogether } from "./draw-together/index";
 import { geoChallenge } from "./geo-challenge/index";
 import { militaryZone } from "./military-zone";
+import { ludo } from "./ludo";
 
 /**
  * Playable games. A game appears here only once its module + SQL logic exist;
@@ -12,7 +13,7 @@ import { militaryZone } from "./military-zone";
  * To add a game: create `src/games/<game>/`, add its `0017_<game>.sql`
  * migration, then add the module to this array.
  */
-const MODULES: GameModule[] = [connectFour, wordSnake, militaryZone, drawTogether, geoChallenge];
+const MODULES: GameModule[] = [connectFour, wordSnake, militaryZone, drawTogether, geoChallenge, ludo];
 
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]));
