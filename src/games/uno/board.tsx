@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import unoGameplayUrl from "@/assets/uno/uno-gameplay.mp3";
 import { Loader2, Swords } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -471,7 +472,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
   useEffect(() => {
     if (status === "active") {
       if (!bgMusicRef.current) {
-        bgMusicRef.current = new Audio("/assets/uno/uno-gameplay.mp3");
+        bgMusicRef.current = new Audio(unoGameplayUrl);
         bgMusicRef.current.loop = true;
         bgMusicRef.current.volume = 0.5;
       }
