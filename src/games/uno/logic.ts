@@ -33,6 +33,14 @@ export type UnoGame = {
     chosenColor: CardColor | null;
     drewCards: string[];
   };
+  /**
+   * Written by game_draw. true = player drew a playable card and turn is
+   * kept; a second draw is blocked server-side. Absent after _uno_apply_move
+   * rebuilds game state — game_draw reads it via coalesce so absence = false.
+   */
+  drawnThisTurn?: boolean;
+  /** Seat (1 or 2) that has declared UNO, or null. Set by game_uno_declare. */
+  unoDeclared: 1 | 2 | null;
 };
 
 export type ParsedCard = {
@@ -70,8 +78,19 @@ export function canPlayCard(
   currentValue: number | null,
 ): boolean {
   const parsed = parseCard(card);
-  if (!parsed || parsed.type !== "number") return false;
+  if (!parsed) return false;
+
+  // Wild and Wild Draw Four are always playable
+  if (parsed.type === "wild" || parsed.type === "wild_draw_four") return true;
+
+  // All coloured cards: same colour always works
   if (parsed.color === currentColor) return true;
-  if (currentType === "number" && currentValue !== null && parsed.value === currentValue) return true;
-  return false;
+
+  // Same number (any colour)
+  if (parsed.type === "number") {
+    return currentType === "number" && currentValue !== null && parsed.value === currentValue;
+  }
+
+  // Same action type: Skip-on-Skip, Reverse-on-Reverse, Draw-Two-on-Draw-Two
+  return parsed.type === currentType;
 }

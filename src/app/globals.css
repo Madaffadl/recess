@@ -43,6 +43,7 @@
   --animate-blink: blink 1.15s steps(2, start) infinite;
   --animate-accordion-down: accordion-down 0.22s ease-out;
   --animate-accordion-up: accordion-up 0.22s ease-out;
+  --animate-float: float 3s ease-in-out infinite;
 }
 
 @keyframes blink {
@@ -106,6 +107,66 @@
   to {
     height: 0;
   }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-9px); }
+}
+
+@keyframes uno-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes uno-drift {
+  0%   { transform: translateY(-10vh) translateX(0) rotate(0deg); opacity: 0; }
+  10%  { opacity: .9; }
+  90%  { opacity: .9; }
+  100% { transform: translateY(115vh) translateX(var(--dx, 20px)) rotate(var(--rot, 540deg)); opacity: 0; }
+}
+
+@keyframes uno-twinkle {
+  0%, 100% { opacity: 0; transform: scale(.4); }
+  50%       { opacity: 1; transform: scale(1.2); }
+}
+
+@keyframes uno-breathe {
+  0%, 100% { opacity: .6; transform: scale(1); }
+  50%       { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes uno-hue {
+  0%, 100% { filter: hue-rotate(0deg); opacity: .7; }
+  50%       { filter: hue-rotate(-25deg); opacity: 1; }
+}
+
+@keyframes uno-pile-attract {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(255,210,63,0.7)); transform: translate(-50%, -100%) rotateX(-28deg) scale(1); }
+  50%       { filter: drop-shadow(0 0 22px rgba(255,210,63,1));   transform: translate(-50%, -100%) rotateX(-28deg) scale(1.08); }
+}
+
+@keyframes uno-card-in {
+  from { transform: scale(0.3) translateY(16px); opacity: 0; }
+  to   { transform: scale(1) translateY(0);      opacity: 1; }
+}
+
+@keyframes uno-deal {
+  0%   { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+  60%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--deal-x, 0px), var(--deal-y, 140px)) rotate(var(--deal-r, 0deg)) scale(0.88); }
+}
+
+@keyframes unopop {
+  0%   { opacity: 0; transform: scale(.2) rotate(-12deg); }
+  25%  { opacity: 1; transform: scale(1.15) rotate(4deg); }
+  45%  { transform: scale(1) rotate(0); }
+  75%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.1); }
+}
+
+.uno-hand-card:hover {
+  transform: translateY(-24px) !important;
+  z-index: 60 !important;
 }
 
 /* ------------------------------------------------------------------ */
