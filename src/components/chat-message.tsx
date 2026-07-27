@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { motion } from "motion/react";
 
 import { UserAvatar } from "@/components/user-avatar";
@@ -24,6 +25,34 @@ export function annotateGroups<T extends ChatBubbleMessage>(messages: T[]) {
       !!next && next.user === message.user && !!next.self === !!message.self;
     return { message, showHeader: !samePrev, showTime: !sameNext };
   });
+}
+
+const URL_RE = /https?:\/\/[^\s<>"{}|\\^[\]`]+/g;
+
+function renderTextWithLinks(text: string, self: boolean) {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(URL_RE)) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(
+      <a
+        key={m.index}
+        href={m[0]}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={cn(
+          "underline underline-offset-2 break-all",
+          self ? "text-amber-200 hover:text-amber-100" : "text-primary hover:text-primary/80"
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {m[0]}
+      </a>
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts.length ? parts : text;
 }
 
 export function ChatBubble({
@@ -74,7 +103,7 @@ export function ChatBubble({
               : "rounded-2xl rounded-tl-md border border-border bg-white/[0.04] text-foreground/90"
           )}
         >
-          {message.text}
+          {renderTextWithLinks(message.text, self)}
         </div>
 
         {showTime && message.time && (

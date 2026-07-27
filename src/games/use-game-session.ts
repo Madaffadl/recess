@@ -18,6 +18,28 @@ export type GameSessionState<TGame> = {
   join: () => Promise<void>;
   /** Submit a game-specific action, e.g. `{ col: 3 }`. */
   move: (action: Record<string, unknown>) => Promise<void>;
+  /**
+   * Mark (or, with `false`, unmark) this player ready in the pre-game lobby.
+   * Notifies other players via realtime; the host triggers game start
+   * separately with `startGame`. Defaults to `true`.
+   */
+  setReady: (isReady?: boolean) => Promise<void>;
+  /**
+   * Signal the server to start the game (host only).
+   * Calls the `game_start` RPC, which verifies that every non-host game seat
+   * is ready before initialising the game and flipping the session to `active`.
+   */
+  startGame: () => Promise<void>;
+  /**
+   * Draw one card from the deck via the game_draw RPC. Enforced server-side:
+   * only the current player may draw, and only once per turn.
+   */
+  drawCard: () => Promise<void>;
+  /**
+   * Declare UNO via game_uno_declare. Not turn-gated — callable by either
+   * seated player the moment their hand reaches exactly one card.
+   */
+  declareUno: () => Promise<void>;
   /** Reset a finished game. */
   rematch: () => Promise<void>;
 };
@@ -156,6 +178,58 @@ export function useGameSession<TGame = unknown>({
     [session]
   );
 
+  // Named `markReady` internally to avoid clashing with the `setReady` useState
+  // setter for the `ready` (loaded) flag above; exposed as `setReady` below.
+  const markReady = useCallback(
+    async (isReady: boolean = true) => {
+      if (!session) return;
+      setError(null);
+      const supabase = getSupabaseClient();
+      const { error: rpcError } = await supabase.rpc("game_ready", {
+        p_session: session.id,
+        p_ready: isReady,
+      });
+      // New state (ready flags, or active + initialised game) arrives via realtime.
+      if (rpcError) setError(rpcError.message);
+    },
+    [session]
+  );
+
+  const startGame = useCallback(async () => {
+    if (!session) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const supabase = getSupabaseClient();
+      const { error: rpcError } = await supabase.rpc("game_start", {
+        p_session: session.id,
+      });
+      if (rpcError) setError(rpcError.message);
+    } finally {
+      setBusy(false);
+    }
+  }, [session]);
+
+  const drawCard = useCallback(async () => {
+    if (!session) return;
+    setError(null);
+    const supabase = getSupabaseClient();
+    const { error: rpcError } = await supabase.rpc("game_draw", {
+      p_session: session.id,
+    });
+    if (rpcError) setError(rpcError.message);
+  }, [session]);
+
+  const declareUno = useCallback(async () => {
+    if (!session) return;
+    setError(null);
+    const supabase = getSupabaseClient();
+    const { error: rpcError } = await supabase.rpc("game_uno_declare", {
+      p_session: session.id,
+    });
+    if (rpcError) setError(rpcError.message);
+  }, [session]);
+
   const rematch = useCallback(async () => {
     if (!session) return;
     setError(null);
@@ -166,5 +240,5 @@ export function useGameSession<TGame = unknown>({
     if (rpcError) setError(rpcError.message);
   }, [session]);
 
-  return { session, myRole, ready, busy, error, join, move, rematch };
+  return { session, myRole, ready, busy, error, join, move, startGame, drawCard, declareUno, setReady: markReady, rematch };
 }

@@ -42,10 +42,18 @@ export function LoungePanel() {
     useLounge({ handle: identity });
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // randomHandle runs only on the client to avoid SSR/client hydration mismatch
+  // randomHandle runs only on the client to avoid SSR/client hydration mismatch.
+  // Read from sessionStorage first so lounge and room chat share the same handle.
   useEffect(() => {
-    setIdentity(randomHandle());
+    const stored = sessionStorage.getItem("recess-handle");
+    setIdentity(stored ?? randomHandle());
   }, []);
+
+  // Persist any handle change so room chat picks it up.
+  useEffect(() => {
+    if (!identity) return;
+    sessionStorage.setItem("recess-handle", identity);
+  }, [identity]);
 
   // Establish an anonymous Supabase session (best-effort; foundation for the
   // room + game phases). The lounge itself works with just the anon key.

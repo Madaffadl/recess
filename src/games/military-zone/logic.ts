@@ -25,7 +25,7 @@ export const SHIPS: ShipDef[] = [
 
 export type PlacedShip = {
   id: ShipId;
-  player: 1 | 2;
+  player: number;
   r: number;
   c: number;
   size: number;
@@ -44,16 +44,60 @@ export type PendingShip = {
 export type BattleshipGame = {
   phase: 'placement' | 'battle' | 'finished';
   ready: Record<string, boolean>;
+  eliminated: Record<string, boolean>;
   ships: PlacedShip[];
-  shots: Record<string, ShotCell[][]>;
+  shots: Record<string, Record<string, ShotCell[][]>>;
   lastShot: {
-    by: 1 | 2;
+    by: number;
+    target: number;
     r: number;
     c: number;
     result: ShotResult;
     sunkId?: string;
+    eliminatedPlayer?: number;
   } | null;
 };
+
+export type MilitaryZoneSeat = { id: string; handle: string } | null;
+
+export type MilitaryZoneState = {
+  players: Record<string, MilitaryZoneSeat>;
+  hostId: string;
+  numPlayers: number;
+  turn: number;
+  startTurn: number;
+  winner: number | null;
+  moveCount: number;
+  game: BattleshipGame;
+};
+
+export type MilitaryZoneSessionRow = {
+  id: string;
+  room_key: string;
+  game_id: string;
+  state: MilitaryZoneState;
+  status: 'waiting' | 'active' | 'finished';
+};
+
+export function mergeIncomingShots(
+  shots: Record<string, Record<string, ShotCell[][]>>,
+  targetPlayer: number,
+  numPlayers: number,
+): ShotCell[][] {
+  const merged = emptyShots();
+  const targetKey = String(targetPlayer);
+  for (let shooter = 1; shooter <= numPlayers; shooter++) {
+    if (shooter === targetPlayer) continue;
+    const grid = shots[String(shooter)]?.[targetKey];
+    if (!grid) continue;
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        if (grid[r]?.[c]) merged[r][c] = grid[r][c];
+      }
+    }
+  }
+  return merged;
+}
 
 export function shipCells(
   r: number, c: number, size: number, orient: Orient

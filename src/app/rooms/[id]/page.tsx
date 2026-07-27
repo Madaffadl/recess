@@ -9,6 +9,12 @@ import { AnimatePresence } from "motion/react";
 import { PageShell } from "@/components/page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { UserAvatar } from "@/components/user-avatar";
 import {
@@ -20,7 +26,6 @@ import { ChatComposer } from "@/components/chat-composer";
 import { FloatingLounge } from "@/components/floating-lounge";
 import { getGameModule } from "@/games/registry";
 import { GameComingSoon } from "@/games/game-coming-soon";
-import { DrawTogetherLobby } from "@/games/draw-together/lobby";
 import { randomHandle } from "@/lib/data";
 import { joinRoom, leaveRoom, closeRoom, getRoomByInviteCode } from "@/lib/api/rooms";
 import { useRoom } from "@/hooks/use-room";
@@ -123,7 +128,14 @@ export default function RoomDetailPage() {
   const { rooms, loading } = useRooms();
   const room = rooms.find((r) => r.id === params.id);
 
-  const [identity] = useState<string>(() => randomHandle());
+  const [identity] = useState<string>(() => {
+    if (typeof window === "undefined") return randomHandle();
+    const stored = sessionStorage.getItem("recess-handle");
+    if (stored) return stored;
+    const fresh = randomHandle();
+    sessionStorage.setItem("recess-handle", fresh);
+    return fresh;
+  });
 
   // Private room access gate
   const inviteParam = searchParams.get("invite")?.toUpperCase() ?? null;
@@ -167,9 +179,10 @@ export default function RoomDetailPage() {
   useEffect(() => {
     if (gameStarted) {
       sessionStorage.setItem("recess-handle", identity);
+      if (room) sessionStorage.setItem("recess-game-id", room.gameId);
       router.push(`/rooms/${params.id}/play`);
     }
-  }, [gameStarted, params.id, identity, router]);
+  }, [gameStarted, params.id, identity, router, room]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -246,28 +259,6 @@ export default function RoomDetailPage() {
     return <PrivateRoomGate roomId={params.id} onAccess={() => setManualGrant(true)} />;
   }
 
-  // ── Removed by host (kick / close) ──
-  if (removed) {
-    return (
-      <PageShell>
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-24 text-center">
-          <p className="font-display text-xl font-semibold">
-            {removed === "kicked"
-              ? "You were removed from this room"
-              : "This room was closed by the host"}
-          </p>
-          <p className="mt-2 text-sm text-muted">
-            {removed === "kicked"
-              ? "The host removed you from the room."
-              : "The host ended the session."}
-          </p>
-          <Button asChild variant="secondary" className="mt-6">
-            <Link href="/rooms"><ArrowLeft />Back to rooms</Link>
-          </Button>
-        </div>
-      </PageShell>
-    );
-  }
 
   // ── Room full / expired ──
   if (joinError) {
@@ -378,19 +369,26 @@ export default function RoomDetailPage() {
 
       {/* Game — full width, right padding keeps it off the screen edge */}
       <div className="mt-8 pr-1 lg:pr-4">
-        {gameModule?.renderMode === "fullpage" ? (
-          <DrawTogetherLobby
+        {gameModule?.renderMode === "fullpage" && gameModule.Lobby ? (
+          <gameModule.Lobby
             roomKey={room.id}
             handle={identity}
             isHost={isHost}
             onGameStarted={() => {
               sessionStorage.setItem("recess-handle", identity);
+              sessionStorage.setItem("recess-game-id", room.gameId);
               notifyGameStarted();
               router.push(`/rooms/${params.id}/play`);
             }}
           />
         ) : gameModule ? (
-          <gameModule.Board roomKey={room.id} handle={identity} />
+          <gameModule.Board
+            roomKey={room.id}
+            handle={identity}
+            participants={displayPeers.map(({ handle, uid }) => ({ handle, uid }))}
+            isHost={isHost}
+            onCloseRoom={closeForAll}
+          />
         ) : (
           <GameComingSoon gameName={room.gameName} gameEmoji={room.gameEmoji} />
         )}
@@ -511,6 +509,34 @@ export default function RoomDetailPage() {
 
       {/* Minimized lounge — floating chat widget, collapsed by default */}
       <FloatingLounge />
+
+      {/* Room closed / kicked modal */}
+      <Dialog open={!!removed} onOpenChange={() => {}}>
+        <DialogContent
+          className="gap-0 rounded-2xl border-border/60 bg-background/90 p-0 shadow-2xl backdrop-blur-xl sm:max-w-xs"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
+          <div className="flex flex-col items-center gap-5 px-6 pb-8 pt-7 text-center">
+            <div className="text-4xl select-none">
+              {removed === "kicked" ? "🚫" : "🔒"}
+            </div>
+            <div>
+              <DialogTitle className="font-display text-xl font-semibold">
+                {removed === "kicked" ? "Kamu dikeluarkan" : "Room telah dihapus"}
+              </DialogTitle>
+              <DialogDescription className="mt-1.5 text-sm text-muted">
+                {removed === "kicked"
+                  ? "Host telah mengeluarkanmu dari room ini."
+                  : "Host telah menutup room ini."}
+              </DialogDescription>
+            </div>
+            <Button className="w-full" onClick={() => router.push("/rooms")}>
+              OK
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
