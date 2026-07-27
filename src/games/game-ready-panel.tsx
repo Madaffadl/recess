@@ -20,7 +20,7 @@ type GameReadyPanelProps = {
   busy?: boolean;
   /** Toggle this player's ready flag (calls the hook's `setReady`). */
   onReady: (isReady: boolean) => void;
-  /** Take the open second seat, when the caller isn't seated yet. */
+  /** Take the next open seat, when the caller isn't seated yet. */
   onJoin?: () => void;
   /** Display label, e.g. "UNO". */
   gameLabel?: string;
@@ -28,7 +28,7 @@ type GameReadyPanelProps = {
    * All participants currently present in the room (from Realtime Presence).
    * When provided, the lobby shows the full room list and uses
    * participants.length as the Y denominator for "Players Ready: X / Y".
-   * When absent, falls back to the 2-seat card layout.
+   * When absent, falls back to the seat card layout.
    */
   participants?: RoomParticipant[];
   /** The current user's handle — used to mark "YOU" among non-seated participants. */
@@ -44,9 +44,7 @@ type GameReadyPanelProps = {
   onStart?: () => void;
 };
 
-const SEATS = ["1", "2"] as const;
-
-// ── Seat-grid fallback (2-player layout) ──────────────────────────────────────
+// ── Seat-grid card ─────────────────────────────────────────────────────────────
 
 function SeatCard({
   player,
@@ -65,7 +63,7 @@ function SeatCard({
         <span className="grid size-14 place-items-center rounded-full border border-dashed border-border text-muted transition-colors group-hover:text-foreground">
           <UserPlus className="size-5" />
         </span>
-        <p className="text-sm text-muted">Waiting for another player…</p>
+        <p className="text-sm text-muted">Waiting for player…</p>
       </div>
     );
   }
@@ -119,10 +117,9 @@ function ParticipantRow({
   isHost,
 }: {
   participant: RoomParticipant;
-  seatInfo: { seat: "1" | "2"; isReady: boolean } | null;
+  seatInfo: { seat: string; isReady: boolean } | null;
   isMe: boolean;
-  /** True when this participant is in seat "1" — the game session creator,
-   *  since game_join always seats the first caller as seat 1. */
+  /** True when this participant is in seat "1" — the game session creator. */
   isHost: boolean;
 }) {
   const isSeated = seatInfo !== null;
@@ -178,35 +175,17 @@ function findSeatInfo(
   participant: RoomParticipant,
   players: GamePlayers,
   readyMap: ReadyMap
-): { seat: "1" | "2"; isReady: boolean } | null {
-  for (const seat of SEATS) {
-    const p = players[seat];
+): { seat: string; isReady: boolean } | null {
+  for (const [seat, p] of Object.entries(players)) {
     if (!p) continue;
     const match = participant.uid ? p.id === participant.uid : p.handle === participant.handle;
-    if (match) return { seat, isReady: readyMap[seat] };
+    if (match) return { seat, isReady: readyMap[seat] ?? false };
   }
   return null;
 }
 
 // ── Panel ─────────────────────────────────────────────────────────────────────
 
-/**
- * Generic pre-game lobby, shared by every game on the generic engine.
- *
- * HOST-CONTROLLED START (`isHost` prop provided):
- *   isHost=true  → yellow "Start Game" button only (no Ready).
- *                  Enabled when every non-host game seat is filled+ready.
- *                  Progress label reads "Game Players Ready" so it is obvious
- *                  the counter tracks game seats, not all room participants.
- *   isHost=false → green "Ready" / "Cancel Ready" button only (no Start Game).
- *
- * LEGACY (isHost absent):
- *   Ready button for everyone; no host-controlled start.
- *
- * PARTICIPANT LIST (`participants` provided):
- *   Shows all room participants. Game-seated players show READY/NOT READY;
- *   observers show "In lobby". Falls back to the 2-seat card grid when absent.
- */
 export function GameReadyPanel({
   players,
   ready,
@@ -220,47 +199,38 @@ export function GameReadyPanel({
   myHandle,
   isHost,
 }: GameReadyPanelProps) {
-  const readyMap: ReadyMap = ready ?? { "1": false, "2": false };
+  const readyMap: ReadyMap = ready ?? {};
 
-  const seatedCount = SEATS.filter((s) => players[s]).length;
-  const readyCount  = SEATS.filter((s) => players[s] && readyMap[s]).length;
-  const totalCount  = participants ? participants.length : SEATS.length;
+  // Sorted seat keys derived from the live players object.
+  const seats = Object.keys(players).sort((a, b) => Number(a) - Number(b));
 
-  const iAmSeated  = myRole === 1 || myRole === 2;
-  const myReady    = myRole ? readyMap[String(myRole) as "1" | "2"] : false;
-  const bothSeated = seatedCount === SEATS.length;
-  const seatOpen   = !players["2"];
-  const notReadySeats = SEATS.filter((s) => players[s] && !readyMap[s]);
+  const seatedCount   = seats.filter((s) => !!players[s]).length;
+  const readyCount    = seats.filter((s) => !!players[s] && (readyMap[s] ?? false)).length;
+  const totalCount    = participants ? participants.length : seats.length;
+
+  const iAmSeated = myRole !== null;
+  const myReady   = myRole !== null ? (readyMap[String(myRole)] ?? false) : false;
+  const enoughPlayers = seatedCount >= 2;
+  const notReadySeats = seats.filter((s) => !!players[s] && !(readyMap[s] ?? false));
 
   // ── Host-controlled start ─────────────────────────────────────────────────
-  // The server (game_start RPC) is the source of truth: it resolves the host
-  // from room.host_id and performs the final readiness check server-side.
-  // The frontend cannot replicate that lookup, so canStart is a local UX
-  // prediction — it optimistically disables the button when the call would
-  // likely fail, but the server enforces the real rules regardless.
-  // hostSeat is inferred from this client's own game seat (myRole), which
-  // approximates the server's host-seat lookup only when isHost === true.
-  const hostSeat     = isHost === true && myRole ? (String(myRole) as "1" | "2") : null;
-  const nonHostSeats = SEATS.filter((s) => s !== hostSeat);
+  const hostSeat     = isHost === true && myRole !== null ? String(myRole) : null;
+  const nonHostSeats = seats.filter((s) => s !== hostSeat);
   const canStart =
     isHost === true &&
     nonHostSeats.length > 0 &&
-    nonHostSeats.every((s) => !!players[s] && readyMap[s]);
+    nonHostSeats.every((s) => !!players[s] && (readyMap[s] ?? false));
 
   // ── Progress bar ──────────────────────────────────────────────────────────
-  // When host-controlled: count only non-host game seats so the bar reaches
-  // 100% when canStart is true, and label it "Game Players Ready" to make
-  // clear it is not counting all room participants.
-  // When legacy (isHost absent): use all seats / participants as before.
   const progressX = isHost === true
-    ? nonHostSeats.filter((s) => !!players[s] && readyMap[s]).length
+    ? nonHostSeats.filter((s) => !!players[s] && (readyMap[s] ?? false)).length
     : readyCount;
   const progressY = isHost === true ? nonHostSeats.length : totalCount;
   const pct = progressY > 0 ? Math.round((progressX / progressY) * 100) : 0;
 
   let subtitle: string;
-  if (!bothSeated) {
-    subtitle = "Waiting for another player…";
+  if (!enoughPlayers) {
+    subtitle = "Waiting for players…";
   } else if (isHost === true && canStart) {
     subtitle = "All players are ready!";
   } else if (isHost === false && iAmSeated && myReady) {
@@ -291,19 +261,18 @@ export function GameReadyPanel({
           </p>
           <p className="font-mono text-sm font-semibold tabular-nums text-foreground">
             {participants ? participants.length : seatedCount} /{" "}
-            {participants ? participants.length : SEATS.length}
+            {participants ? participants.length : seats.length}
           </p>
         </div>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-5 pt-6">
-        {/* Player list — room-based when participants provided, seat grid otherwise */}
+        {/* Player list */}
         {participants ? (
           <div className="flex flex-col gap-2">
             {participants.map((p) => {
               const seatInfo = findSeatInfo(p, players, readyMap);
-              // "me" by seat if seated; by handle if in the lobby
-              const isMe = myRole
+              const isMe = myRole !== null
                 ? seatInfo?.seat === String(myRole)
                 : p.handle === myHandle;
               return (
@@ -319,11 +288,11 @@ export function GameReadyPanel({
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
-            {SEATS.map((seat) => (
+            {seats.map((seat) => (
               <SeatCard
                 key={seat}
-                player={players[seat]}
-                isReady={!!players[seat] && readyMap[seat]}
+                player={players[seat] ?? null}
+                isReady={!!players[seat] && (readyMap[seat] ?? false)}
                 isMe={myRole === Number(seat)}
                 isHost={seat === "1"}
               />
@@ -356,8 +325,6 @@ export function GameReadyPanel({
 
         {/* Primary action */}
         {isHost === true ? (
-          /* Host only: yellow Start Game. Disabled until the local canStart
-           * prediction is true. The server validates independently on click. */
           <div className="flex flex-col gap-2">
             <Button
               size="lg"
@@ -380,7 +347,6 @@ export function GameReadyPanel({
             )}
           </div>
         ) : iAmSeated ? (
-          /* Non-host seated player (or legacy): Ready / Cancel Ready */
           myReady ? (
             <Button
               size="lg"
@@ -402,7 +368,7 @@ export function GameReadyPanel({
               Ready
             </Button>
           )
-        ) : seatOpen && onJoin ? (
+        ) : onJoin ? (
           <Button
             size="lg"
             className="w-full transition-all active:scale-[0.98]"

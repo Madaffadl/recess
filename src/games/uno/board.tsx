@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import unoGameplayUrl from "@/assets/uno/uno-gameplay.mp3";
+const unoGameplayUrl = "/audio/uno-gameplay.mp3";
 import { Loader2, Swords } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -94,6 +94,21 @@ const SEAT_AVATAR_GRADIENTS: string[] = [
   "linear-gradient(160deg,#4b3f8f,#7a5cc7)",
   "linear-gradient(160deg,#2b6cc9,#173f7a)",
   "linear-gradient(160deg,#3f6b8f,#5c9cc7)",
+];
+
+// Stage (3D table) and viewport HUD positions for up to 7 opponents.
+type OppPosition = {
+  stage: { left: string; top: string };
+  hud: React.CSSProperties;
+};
+const OPP_POSITIONS: OppPosition[] = [
+  { stage: { left: "50%", top: "8%"  }, hud: { top: "1%",  left: "50%", transform: "translateX(-50%)" } },
+  { stage: { left: "14%", top: "52%" }, hud: { top: "24%", left: "1.5%"  } },
+  { stage: { left: "86%", top: "52%" }, hud: { top: "24%", right: "1.5%" } },
+  { stage: { left: "27%", top: "22%" }, hud: { top: "10%", left: "19%"   } },
+  { stage: { left: "73%", top: "22%" }, hud: { top: "10%", right: "19%"  } },
+  { stage: { left: "12%", top: "37%" }, hud: { top: "44%", left: "1.5%"  } },
+  { stage: { left: "88%", top: "37%" }, hud: { top: "44%", right: "1.5%" } },
 ];
 
 type ConfettiShard = {
@@ -311,7 +326,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
   const [pendingWild, setPendingWild] = useState<string | null>(null);
   const [victoryOpen, setVictoryOpen] = useState(false);
   const [showUnoPop, setShowUnoPop] = useState(false);
-  const prevUnoDeclaredRef = useRef<1 | 2 | null>(null);
+  const prevUnoDeclaredRef = useRef<number | null>(null);
   const [shards, setShards] = useState<ConfettiShard[]>([]);
   const [sparks, setSparks] = useState<Sparkle[]>([]);
   const bgMusicRef = useRef<HTMLAudioElement | null>(null);
@@ -409,7 +424,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
   const state = session?.state;
   const game = state?.game ?? null;
   const status = session?.status;
-  const seatKey = myRole !== null ? (String(myRole) as "1" | "2") : null;
+  const seatKey = myRole !== null ? String(myRole) : null;
   const isMyTurn = !!state && state.turn === myRole;
   const pendingDrawCount = game?.pendingDraw ?? 0;
 
@@ -448,7 +463,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
     if (prevStatusRef2.current === "waiting" && status === "active") {
       setIsDealing(true);
       setDealtCount(0);
-      const t = setTimeout(() => setIsDealing(false), 14 * 130 + 500);
+      const t = setTimeout(() => setIsDealing(false), totalDealCards * 130 + 500);
       prevStatusRef2.current = status ?? null;
       return () => clearTimeout(t);
     }
@@ -508,20 +523,29 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
   const topCard = game?.discardPile[0] ?? null;
   const topParsed = topCard ? parseCard(topCard) : null;
   const currentColor = game?.currentColor ?? null;
-  const oppKey = (myRole === 1 ? "2" : "1") as "1" | "2";
-  const oppCount = game?.hands[oppKey]?.length ?? 0;
+
+  // All opponent seat keys (everyone except me), sorted numerically.
+  const oppSeats = state
+    ? Object.keys(state.players)
+        .filter((k) => !!state.players[k] && Number(k) !== myRole)
+        .sort((a, b) => Number(a) - Number(b))
+    : [];
+  // Primary opponent for the 3D fan: whoever is currently active, or first opponent.
+  const numPlayers = Object.values(state?.players ?? {}).filter(Boolean).length;
+  const totalDealCards = Math.max(numPlayers, 2) * 7;
+
   const myHand = seatKey && game ? (game.hands[seatKey] ?? []) : [];
-  const turnSeat = state ? (String(state.turn) as "1" | "2") : null;
+  const turnSeat = state ? String(state.turn) : null;
   const turnHandle = turnSeat ? state?.players[turnSeat]?.handle : null;
 
   const iWon =
     status === "finished" && state !== undefined && state.winner === myRole;
-  const winnerSeat: "1" | "2" | null =
+  const winnerSeat =
     status === "finished" &&
     state !== undefined &&
     state.winner != null &&
     state.winner !== 0
-      ? (String(state.winner) as "1" | "2")
+      ? String(state.winner)
       : null;
   const winnerName =
     winnerSeat !== null
@@ -581,7 +605,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
               ) : (
                 <p className="font-display text-lg font-semibold">
                   <span className="text-amber-200">
-                    {state.players[String(state.winner) as "1" | "2"]?.handle ??
+                    {state.players[String(state.winner)]?.handle ??
                       "Opponent"}
                   </span>{" "}
                   wins
@@ -798,77 +822,80 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                     </span>
                   </div>
 
-                  {/* Opponent face-down fan — fanned from top so cards point toward table center */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: "50%",
-                      top: "8%",
-                      transform: "translate(-50%, 0%) rotateX(-28deg)",
-                      transformOrigin: "50% 0%",
-                      transformStyle: "preserve-3d",
-                    }}
-                  >
-                    {(() => {
-                      const effectiveOpp = isDealing ? Math.min(dealtCount, oppCount) : oppCount;
-                      const n = Math.max(
-                        Math.min(effectiveOpp, 5),
-                        effectiveOpp > 0 ? 1 : 0,
-                      );
-                      const spread = 13;
-                      const start = -((n - 1) / 2) * spread;
-                      return Array.from({ length: n }, (_, i) => (
-                        <div
-                          key={i}
-                          style={{
-                            position: "absolute",
-                            width: 72,
-                            height: 104,
-                            left: 0,
-                            top: 0,
-                            marginLeft: -36,
-                            transform: `rotate(${start + i * spread}deg)`,
-                            transformOrigin: "50% 0%",
-                            borderRadius: 10,
-                            background: "linear-gradient(135deg,#1c1c1c,#000)",
-                            border: "2px solid #fff",
-                            boxShadow: "0 3px 10px rgba(0,0,0,0.65)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            overflow: "hidden",
-                          }}
-                        >
+                  {/* Opponent face-down fans — one per opponent at their table position */}
+                  {oppSeats.map((oSeat, oIdx) => {
+                    const pos = OPP_POSITIONS[oIdx % OPP_POSITIONS.length]!;
+                    const oCount = isDealing
+                      ? dealtCount
+                      : (game?.hands[oSeat]?.length ?? 0);
+                    const n = Math.max(Math.min(oCount, 5), oCount > 0 ? 1 : 0);
+                    const spread = 13;
+                    const start = -((n - 1) / 2) * spread;
+                    return (
+                      <div
+                        key={oSeat}
+                        style={{
+                          position: "absolute",
+                          left: pos.stage.left,
+                          top: pos.stage.top,
+                          transform: "translate(-50%, -100%) rotateX(-28deg)",
+                          transformOrigin: "50% 100%",
+                          transformStyle: "preserve-3d",
+                          display: "flex",
+                          alignItems: "flex-end",
+                        }}
+                      >
+                        {Array.from({ length: n }, (_, i) => (
                           <div
+                            key={i}
                             style={{
-                              position: "absolute",
-                              inset: "8px",
-                              borderRadius: "50%/44%",
-                              transform: "rotate(-22deg)",
-                              background: "#d5342b",
+                              width: 68,
+                              height: 100,
+                              flexShrink: 0,
+                              marginLeft: i === 0 ? 0 : -44,
+                              transform: `rotate(${start + i * spread}deg)`,
+                              transformOrigin: "50% 100%",
+                              borderRadius: 10,
+                              background: "linear-gradient(135deg,#1c1c1c,#000)",
+                              border: "2px solid #fff",
+                              boxShadow: "0 3px 10px rgba(0,0,0,0.65)",
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
+                              overflow: "hidden",
                             }}
                           >
-                            <span
+                            <div
                               style={{
-                                transform: "rotate(22deg)",
-                                fontStyle: "italic",
-                                fontWeight: 900,
-                                fontSize: 11,
-                                color: "#fff",
-                                letterSpacing: "-0.02em",
-                                textShadow: "1px 1px 0 rgba(0,0,0,.35)",
+                                position: "absolute",
+                                inset: "8px",
+                                borderRadius: "50%/44%",
+                                transform: "rotate(-22deg)",
+                                background: "#d5342b",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
                               }}
                             >
-                              UNO
-                            </span>
+                              <span
+                                style={{
+                                  transform: "rotate(22deg)",
+                                  fontStyle: "italic",
+                                  fontWeight: 900,
+                                  fontSize: 11,
+                                  color: "#fff",
+                                  letterSpacing: "-0.02em",
+                                  textShadow: "1px 1px 0 rgba(0,0,0,.35)",
+                                }}
+                              >
+                                UNO
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      ));
-                    })()}
-                  </div>
+                        ))}
+                      </div>
+                    );
+                  })}
 
                   {/* Draw pile */}
                   {(() => {
@@ -1124,25 +1151,25 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                   </div>
                 </div>
 
-                {/* Opponent HUD — outside 3D stage, always faces camera */}
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 10,
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    zIndex: 45,
-                  }}
-                >
-                  <PlayerSlot
-                    seat={Number(oppKey)}
-                    handle={state?.players[oppKey]?.handle ?? "Opponent"}
-                    cardCount={oppCount}
-                    isTurn={!isMyTurn && !!game}
-                    unoDeclared={game?.unoDeclared === Number(oppKey)}
-                    isMe={false}
-                  />
-                </div>
+                {/* Opponent HUDs — each fixed at their viewport position */}
+                {oppSeats.map((oSeat, oIdx) => {
+                  const pos = OPP_POSITIONS[oIdx % OPP_POSITIONS.length]!;
+                  return (
+                    <div
+                      key={oSeat}
+                      style={{ position: "absolute", zIndex: 45, display: "flex", flexDirection: "column", alignItems: "center", ...pos.hud }}
+                    >
+                      <PlayerSlot
+                        seat={Number(oSeat)}
+                        handle={state?.players[oSeat]?.handle ?? "Opponent"}
+                        cardCount={game?.hands[oSeat]?.length ?? 0}
+                        isTurn={state?.turn === Number(oSeat) && !!game}
+                        unoDeclared={game?.unoDeclared === Number(oSeat)}
+                        isMe={false}
+                      />
+                    </div>
+                  );
+                })}
 
                 {/* Player HUD — outside 3D stage, always faces camera */}
                 {seatKey && (
@@ -1189,12 +1216,13 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                   </div>
                 )}
 
-                {/* Card dealing animation — alternates between opponent (up) and player (down) */}
+                {/* Card dealing animation — round-robin across N players */}
                 {isDealing && (
                   <div style={{ position: "absolute", inset: 0, zIndex: 55, pointerEvents: "none" }}>
-                    {Array.from({ length: 14 }, (_, i) => {
-                      const cardIdx = Math.floor(i / 2);
-                      const isOpponent = i % 2 === 0;
+                    {Array.from({ length: totalDealCards }, (_, i) => {
+                      const n = Math.max(numPlayers, 2);
+                      const cardIdx = Math.floor(i / n);
+                      const isOpponent = (i % n) !== (n - 1);
                       const offset = cardIdx - 3;
                       return (
                         <div
@@ -1481,7 +1509,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                   if (!game?.lastEvent) return null;
                   const { type, seat } = game.lastEvent;
                   const actor =
-                    state?.players[String(seat) as "1" | "2"]?.handle ??
+                    state?.players[String(seat)]?.handle ??
                     "Someone";
                   const chosenLabel = game.lastEvent.chosenColor
                     ? ` → ${COLOR_LABEL[game.lastEvent.chosenColor] ?? game.lastEvent.chosenColor}`
@@ -1557,7 +1585,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
               Players
             </p>
             <div className="flex flex-col gap-2">
-              {(["1", "2"] as const).map((s) => {
+              {Object.keys(session?.state?.players ?? {}).sort((a, b) => Number(a) - Number(b)).map((s) => {
                 const player = session?.state?.players[s];
                 if (!player) return null;
                 const seatNum = Number(s);
@@ -1681,7 +1709,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
               }
               const { type, seat, card, chosenColor, drewCards } = evt;
               const actor =
-                state?.players[String(seat) as "1" | "2"]?.handle ?? "Someone";
+                state?.players[String(seat)]?.handle ?? "Someone";
               const parsed = card ? parseCard(card) : null;
               const label =
                 type === "game_start"

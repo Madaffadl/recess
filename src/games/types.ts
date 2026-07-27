@@ -22,12 +22,12 @@ export type LobbyProps = {
   onGameStarted: () => void;
 };
 
-export type Player = 1 | 2;
+export type Player = number;
 export type Seat = { id: string; handle: string } | null;
-export type GamePlayers = { "1": Seat; "2": Seat };
+export type GamePlayers = Record<string, Seat>;
 export type GameStatus = "waiting" | "active" | "finished";
 /** Per-seat readiness for the generic pre-game lobby (`state.ready`). */
-export type ReadyMap = Record<"1" | "2", boolean>;
+export type ReadyMap = Record<string, boolean>;
 
 export type GameState<TGame = unknown> = {
   players: GamePlayers;
@@ -39,8 +39,8 @@ export type GameState<TGame = unknown> = {
   ready?: ReadyMap;
   turn: Player;
   startTurn?: Player;
-  /** null = ongoing · 0 = draw · 1|2 = winner */
-  winner: 0 | 1 | 2 | null;
+  /** null = ongoing · 0 = draw · seat number = winner */
+  winner: 0 | number | null;
   moveCount: number;
   /**
    * Game-specific payload (board, hands, etc.). `null` until both players

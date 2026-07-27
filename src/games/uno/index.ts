@@ -5,6 +5,6 @@ import { UNO_ID } from "./logic";
 export const uno: GameModule = {
   id: UNO_ID,
   minPlayers: 2,
-  maxPlayers: 10,
+  maxPlayers: 8,
   Board: UnoBoard,
 };

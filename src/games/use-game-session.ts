@@ -128,9 +128,8 @@ export function useGameSession<TGame = unknown>({
 
   const myRole = useMemo<Player | null>(() => {
     if (!session || !uid) return null;
-    if (session.state.players["1"]?.id === uid) return 1;
-    if (session.state.players["2"]?.id === uid) return 2;
-    return null;
+    const entry = Object.entries(session.state.players).find(([, seat]) => seat?.id === uid);
+    return entry ? Number(entry[0]) : null;
   }, [session, uid]);
 
   const join = useCallback(async () => {
