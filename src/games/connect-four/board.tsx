@@ -156,7 +156,7 @@ export function ConnectFourBoard({ roomKey, handle }: GameBoardProps) {
   const winCells = useMemo(() => {
     const w = state?.winner;
     if (status !== "finished" || !w) return null;
-    return findWinCells(board, w);
+    return findWinCells(board, w as 1 | 2);
   }, [status, state?.winner, board]);
 
   const hasWinner = !!(status === "finished" && state?.winner);

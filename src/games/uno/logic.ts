@@ -19,15 +19,15 @@ export type UnoGame = {
   currentType: CardType;
   /** Null for all non-number card types. */
   currentValue: number | null;
-  /** Each player's hand, keyed by seat ("1" or "2"). */
-  hands: Record<"1" | "2", string[]>;
+  /** Each player's hand, keyed by seat number as a string ("1", "2", …). */
+  hands: Record<string, string[]>;
   /** 1 = clockwise, -1 = counter-clockwise. */
   direction: 1 | -1;
   /** Accumulated draw penalty waiting for the next player to resolve. */
   pendingDraw: number;
   /** Last action — used by the board for display only, not for game logic. */
   lastEvent: {
-    seat: 1 | 2;
+    seat: number;
     type: string;
     card: string | null;
     chosenColor: CardColor | null;
@@ -39,8 +39,8 @@ export type UnoGame = {
    * rebuilds game state — game_draw reads it via coalesce so absence = false.
    */
   drawnThisTurn?: boolean;
-  /** Seat (1 or 2) that has declared UNO, or null. Set by game_uno_declare. */
-  unoDeclared: 1 | 2 | null;
+  /** Seat number that has declared UNO, or null. Set by game_uno_declare. */
+  unoDeclared: number | null;
 };
 
 export type ParsedCard = {
