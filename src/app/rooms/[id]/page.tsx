@@ -20,7 +20,6 @@ import { ChatComposer } from "@/components/chat-composer";
 import { FloatingLounge } from "@/components/floating-lounge";
 import { getGameModule } from "@/games/registry";
 import { GameComingSoon } from "@/games/game-coming-soon";
-import { DrawTogetherLobby } from "@/games/draw-together/lobby";
 import { randomHandle } from "@/lib/data";
 import { joinRoom, leaveRoom, closeRoom, getRoomByInviteCode } from "@/lib/api/rooms";
 import { useRoom } from "@/hooks/use-room";
@@ -123,7 +122,14 @@ export default function RoomDetailPage() {
   const { rooms, loading } = useRooms();
   const room = rooms.find((r) => r.id === params.id);
 
-  const [identity] = useState<string>(() => randomHandle());
+  const [identity] = useState<string>(() => {
+    if (typeof window === "undefined") return randomHandle();
+    const stored = sessionStorage.getItem("recess-handle");
+    if (stored) return stored;
+    const fresh = randomHandle();
+    sessionStorage.setItem("recess-handle", fresh);
+    return fresh;
+  });
 
   // Private room access gate
   const inviteParam = searchParams.get("invite")?.toUpperCase() ?? null;
@@ -167,9 +173,10 @@ export default function RoomDetailPage() {
   useEffect(() => {
     if (gameStarted) {
       sessionStorage.setItem("recess-handle", identity);
+      if (room) sessionStorage.setItem("recess-game-id", room.gameId);
       router.push(`/rooms/${params.id}/play`);
     }
-  }, [gameStarted, params.id, identity, router]);
+  }, [gameStarted, params.id, identity, router, room]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -378,13 +385,14 @@ export default function RoomDetailPage() {
 
       {/* Game — full width, right padding keeps it off the screen edge */}
       <div className="mt-8 pr-1 lg:pr-4">
-        {gameModule?.renderMode === "fullpage" ? (
-          <DrawTogetherLobby
+        {gameModule?.renderMode === "fullpage" && gameModule.Lobby ? (
+          <gameModule.Lobby
             roomKey={room.id}
             handle={identity}
             isHost={isHost}
             onGameStarted={() => {
               sessionStorage.setItem("recess-handle", identity);
+              sessionStorage.setItem("recess-game-id", room.gameId);
               notifyGameStarted();
               router.push(`/rooms/${params.id}/play`);
             }}
