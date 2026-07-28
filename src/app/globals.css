@@ -164,10 +164,27 @@
   100% { opacity: 0; transform: scale(1.1); }
 }
 
+
+@keyframes uno-playable-pulse {
+  0%, 100% { box-shadow: 0 0 7px 2px rgba(255, 215, 0, 0.55), 0 8px 20px rgba(0,0,0,0.55); }
+  50%       { box-shadow: 0 0 16px 6px rgba(255, 215, 0, 0.9),  0 8px 20px rgba(0,0,0,0.55); }
+}
+
+.uno-hand-card.playable {
+  border-color: #ffd700 !important;
+  animation: uno-playable-pulse 1.5s ease-in-out infinite;
+}
+
+.uno-hand-card.playable:hover {
+  animation-play-state: paused;
+  box-shadow: 0 0 24px 9px rgba(255, 215, 0, 1), 0 12px 24px rgba(0,0,0,0.6) !important;
+}
+
 .uno-hand-card:hover {
   transform: translateY(-24px) !important;
   z-index: 60 !important;
 }
+
 
 /* ------------------------------------------------------------------ */
 /*  Base                                                              */

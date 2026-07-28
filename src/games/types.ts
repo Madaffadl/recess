@@ -41,6 +41,8 @@ export type GameState<TGame = unknown> = {
   startTurn?: Player;
   /** null = ongoing · 0 = draw · seat number = winner */
   winner: 0 | number | null;
+  /** Ordered finishing positions: index 0 = 1st place, last index = loser. */
+  rankings?: number[];
   moveCount: number;
   /**
    * Game-specific payload (board, hands, etc.). `null` until both players

@@ -303,6 +303,78 @@ function PlayerSlot({
   );
 }
 
+function centerOf(el: HTMLElement): { x: number; y: number } {
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
+type FlyCard = { id: number; card: string; fromX: number; fromY: number; toX: number; toY: number; rotFrom: number; rotTo: number };
+
+function FlyingCard({ fc, onDone }: { fc: FlyCard; onDone: () => void }) {
+  const elRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = elRef.current;
+    if (!el) return;
+    el.style.transition = "none";
+    el.style.left = (fc.fromX - 36) + "px";
+    el.style.top = (fc.fromY - 52) + "px";
+    el.style.transform = `rotate(${fc.rotFrom}deg)`;
+    void el.getBoundingClientRect();
+    el.style.transition = "left 0.48s cubic-bezier(.4,.9,.3,1), top 0.48s cubic-bezier(.4,.9,.3,1), transform 0.48s cubic-bezier(.4,.9,.3,1)";
+    el.style.left = (fc.toX - 36) + "px";
+    el.style.top = (fc.toY - 52) + "px";
+    el.style.transform = `rotate(${fc.rotTo}deg)`;
+    const t = setTimeout(onDone, 520);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const isBack = fc.card === "back";
+  const p = !isBack ? parseCard(fc.card) : null;
+  const isWild = !isBack && !p?.color;
+  const cardBgHex = !isBack && p?.color ? (CARD_HEX[p.color] ?? null) : null;
+  const display = !isBack ? getCardDisplay(fc.card) : null;
+
+  return (
+    <div
+      ref={elRef}
+      style={{
+        position: "fixed",
+        zIndex: 9999,
+        pointerEvents: "none",
+        width: 72,
+        height: 104,
+        borderRadius: 10,
+        border: "2px solid #fff",
+        overflow: "hidden",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.7)",
+        background: isBack
+          ? "linear-gradient(135deg,#1c1c1c,#000)"
+          : isWild
+            ? "linear-gradient(135deg,#111,#000)"
+            : (cardBgHex ?? "#888"),
+      }}
+    >
+      {isBack ? (
+        <>
+          <div style={{ position: "absolute", inset: "8px", borderRadius: "50%/44%", transform: "rotate(-22deg)", background: "#d5342b" }} />
+          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2, fontWeight: 900, fontStyle: "italic", fontSize: 14, color: "#fff" }}>UNO</span>
+        </>
+      ) : (
+        <>
+          <div style={{
+            position: "absolute", inset: "8px", borderRadius: "50%/44%", transform: "rotate(-22deg)",
+            background: isWild ? "conic-gradient(#d5342b 0 90deg, #1f6fd6 90deg 180deg, #2ea24a 180deg 270deg, #e9b21a 270deg 360deg)" : "rgba(255,255,255,0.88)",
+            boxShadow: isWild ? "inset 0 0 0 3px #fff" : undefined,
+          }} />
+          <span style={{ position: "absolute", top: 4, left: 5, zIndex: 2, fontWeight: 900, fontSize: 10, color: "#fff", lineHeight: 1, WebkitTextStroke: ".5px rgba(0,0,0,.3)" }}>{display?.corner}</span>
+          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2, fontWeight: 900, fontSize: 34, color: isWild ? "#fff" : (cardBgHex ?? "#fff"), lineHeight: 1 }}>{display?.center}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }: GameBoardProps) {
   const router = useRouter();
   const {
@@ -333,6 +405,13 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
   const [isDealing, setIsDealing] = useState(false);
   const [dealtCount, setDealtCount] = useState(0);
   const prevStatusRef2 = useRef<string | null>(null);
+  const [flyingCards, setFlyingCards] = useState<FlyCard[]>([]);
+  const flyIdRef = useRef(0);
+  const drawPileRef = useRef<HTMLButtonElement>(null);
+  const discardPileRef = useRef<HTMLDivElement>(null);
+  const handAreaRef = useRef<HTMLDivElement>(null);
+  const pendingWildElRef = useRef<HTMLButtonElement | null>(null);
+  const pendingDrawCountRef = useRef(0);
 
   useEffect(() => {
     const palette = ["#ffd23f", "#e8532a", "#d5342b", "#f0a01a", "#ffe6b0", "#c22018", "#ff8a3d"];
@@ -372,36 +451,68 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
     );
   }, []);
 
+  const spawnFly = useCallback((
+    count: number, card: string,
+    fromX: number, fromY: number, toX: number, toY: number,
+    rotFrom = 0,
+  ) => {
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        const id = ++flyIdRef.current;
+        setFlyingCards(prev => [...prev, { id, card, fromX, fromY, toX, toY, rotFrom, rotTo: Math.random() * 20 - 10 }]);
+      }, i * 110);
+    }
+  }, []);
+
   const handleDraw = useCallback(async () => {
     playCardSound("draw");
+    if (drawPileRef.current && handAreaRef.current) {
+      const from = centerOf(drawPileRef.current);
+      const hr = handAreaRef.current.getBoundingClientRect();
+      const to = { x: hr.left + hr.width / 2, y: hr.top + hr.height / 2 };
+      const count = pendingDrawCountRef.current > 0 ? pendingDrawCountRef.current : 1;
+      spawnFly(count, "back", from.x, from.y, to.x, to.y, -8);
+    }
     setDrawing(true);
     await drawCard();
     setNoPlayableOpen(false);
     setForcedDrawOpen(false);
     setDrawing(false);
-  }, [drawCard]);
+  }, [drawCard, spawnFly]);
 
   const handleWildColor = useCallback(
     (color: CardColor) => {
       if (!pendingWild) return;
       const card = pendingWild;
       setPendingWild(null);
+      if (pendingWildElRef.current && discardPileRef.current) {
+        const from = centerOf(pendingWildElRef.current);
+        const to = centerOf(discardPileRef.current);
+        spawnFly(1, card, from.x, from.y, to.x, to.y);
+      }
+      pendingWildElRef.current = null;
       move({ type: "play_card", card, chosenColor: color });
     },
-    [pendingWild, move],
+    [pendingWild, move, spawnFly],
   );
 
   const handleCardClick = useCallback(
-    (card: string) => {
+    (card: string, cardEl: HTMLButtonElement) => {
       playCardSound("play");
       const p = parseCard(card);
       if (p?.type === "wild" || p?.type === "wild_draw_four") {
+        pendingWildElRef.current = cardEl;
         setPendingWild(card);
       } else {
+        if (discardPileRef.current) {
+          const from = centerOf(cardEl);
+          const to = centerOf(discardPileRef.current);
+          spawnFly(1, card, from.x, from.y, to.x, to.y);
+        }
         move({ type: "play_card", card });
       }
     },
-    [move],
+    [move, spawnFly],
   );
 
   const handleBackToRooms = useCallback(async () => {
@@ -427,6 +538,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
   const seatKey = myRole !== null ? String(myRole) : null;
   const isMyTurn = !!state && state.turn === myRole;
   const pendingDrawCount = game?.pendingDraw ?? 0;
+  pendingDrawCountRef.current = pendingDrawCount;
 
   useEffect(() => {
     if (status === "finished" || !isMyTurn || !game) {
@@ -484,6 +596,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
     return () => clearTimeout(delay);
   }, [isDealing]);
 
+
   useEffect(() => {
     if (status === "active") {
       if (!bgMusicRef.current) {
@@ -512,6 +625,8 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
     if (cur === null) prevUnoDeclaredRef.current = null;
   }, [game?.unoDeclared]);
 
+  const myHand = seatKey && game ? (game.hands[seatKey] ?? []) : [];
+
   if (!ready) {
     return (
       <div className="flex items-center justify-center rounded-2xl border border-amber-900/30 bg-[#120a04] p-10">
@@ -534,9 +649,12 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
   const numPlayers = Object.values(state?.players ?? {}).filter(Boolean).length;
   const totalDealCards = Math.max(numPlayers, 2) * 7;
 
-  const myHand = seatKey && game ? (game.hands[seatKey] ?? []) : [];
   const turnSeat = state ? String(state.turn) : null;
   const turnHandle = turnSeat ? state?.players[turnSeat]?.handle : null;
+
+  const rankings: number[] | undefined = state?.rankings;
+  const myRankIndex = myRole !== null && rankings ? rankings.indexOf(myRole) : -1;
+  const iFinishedEarly = myRankIndex >= 0 && status === "active";
 
   const iWon =
     status === "finished" && state !== undefined && state.winner === myRole;
@@ -905,6 +1023,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                     );
                     return (
                       <button
+                        ref={drawPileRef}
                         type="button"
                         onClick={canClick ? handleDraw : undefined}
                         disabled={!canClick || drawing}
@@ -1025,6 +1144,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
 
                   {/* Discard pile */}
                   <div
+                    ref={discardPileRef}
                     style={{
                       position: "absolute",
                       left: "62%",
@@ -1317,6 +1437,17 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                       paddingBottom: 10,
                     }}
                   >
+                    {/* Spectator banner — shown when this player already finished */}
+                    {iFinishedEarly && (
+                      <div className="mb-1 flex items-center gap-2 rounded-xl border border-amber-600/30 bg-amber-950/70 px-5 py-2.5 backdrop-blur-sm">
+                        <span className="text-lg leading-none">
+                          {myRankIndex === 0 ? "🥇" : myRankIndex === 1 ? "🥈" : myRankIndex === 2 ? "🥉" : "🎖️"}
+                        </span>
+                        <span className="text-sm font-semibold text-amber-200">
+                          You finished #{myRankIndex + 1}! Watching the game…
+                        </span>
+                      </div>
+                    )}
                     {/* UNO / pass turn — above fan */}
                     {((myRole !== null && myHand.length === 1) ||
                       (isMyTurn && game.drawnThisTurn)) && (
@@ -1359,6 +1490,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
 
                     {/* Hand — horizontal row */}
                     <div
+                      ref={handAreaRef}
                       style={{
                         display: "flex",
                         flexDirection: "row",
@@ -1400,12 +1532,14 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                             key={`${card}-${idx}`}
                             type="button"
                             disabled={!playable}
-                            onClick={() => handleCardClick(card)}
+                            onClick={(e) => handleCardClick(card, e.currentTarget)}
                             className={cn(
-                              "uno-hand-card select-none overflow-hidden border-2 shadow-lg transition-[opacity,filter,transform] duration-150",
+                              "uno-hand-card select-none overflow-hidden border-2 shadow-lg",
+                              "transition-[opacity,filter,transform] duration-150",
                               playable
                                 ? "cursor-pointer focus:outline-none focus-visible:outline-none active:brightness-125"
                                 : "cursor-not-allowed opacity-35",
+                              playable && "playable",
                             )}
                             style={{
                               flexShrink: 0,
@@ -1534,7 +1668,15 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                   );
                 })()}
                 <p className="text-sm">
-                  {isMyTurn ? (
+                  {iFinishedEarly ? (
+                    <span className="text-amber-500/80">
+                      You finished{" "}
+                      <span className="font-semibold text-amber-300/90">
+                        #{myRankIndex + 1}
+                      </span>
+                      {" "}— watching
+                    </span>
+                  ) : isMyTurn ? (
                     <span className="font-bold tracking-wide text-amber-200">
                       Your turn
                     </span>
@@ -1595,6 +1737,8 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                 const isTurn =
                   String(state?.turn) === s && status === "active";
                 const hasUno = game?.unoDeclared === seatNum;
+                const rankIdx = rankings ? rankings.indexOf(seatNum) : -1;
+                const isFinished = rankIdx >= 0;
                 return (
                   <div key={s} className="flex items-center gap-2">
                     <span
@@ -1613,7 +1757,12 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                     >
                       {player.handle}
                     </span>
-                    {hasUno && (
+                    {isFinished && (
+                      <span className="shrink-0 text-[11px] leading-none">
+                        {rankIdx === 0 ? "🥇" : rankIdx === 1 ? "🥈" : rankIdx === 2 ? "🥉" : `#${rankIdx + 1}`}
+                      </span>
+                    )}
+                    {hasUno && !isFinished && (
                       <span className="shrink-0 rounded-full border border-yellow-400/40 bg-yellow-400/15 px-1.5 py-0.5 text-[9px] font-black leading-none text-yellow-300">
                         UNO
                       </span>
@@ -1623,7 +1772,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                         you
                       </span>
                     )}
-                    {isTurn && (
+                    {isTurn && !isFinished && (
                       <span className="size-2 shrink-0 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.65)]" />
                     )}
                   </div>
@@ -1855,35 +2004,44 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                 </DialogDescription>
               </div>
 
-              <div
-                className="relative z-10 flex items-end justify-center"
-                style={{ height: 72 }}
-              >
-                {(
-                  [
-                    { bg: "bg-red-600", x: -36, rotate: -18 },
-                    { bg: "bg-yellow-400", x: -12, rotate: -6 },
-                    { bg: "bg-green-600", x: 12, rotate: 6 },
-                    { bg: "bg-blue-700", x: 36, rotate: 18 },
-                  ] as const
-                ).map(({ bg, x, rotate }, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "absolute h-16 w-10 overflow-hidden rounded-xl border-2 border-white/75 shadow-lg",
-                      bg,
-                    )}
-                    style={{
-                      transform: `translateX(${x}px) rotate(${rotate}deg)`,
-                      transformOrigin: "bottom center",
-                    }}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-b from-white/20 via-transparent to-black/25" />
+              {/* Rankings list */}
+              {rankings && rankings.length > 1 && (
+                <div className="relative z-10 w-full rounded-xl border border-amber-800/30 bg-amber-950/50 p-3">
+                  <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-widest text-amber-700/70">
+                    Final Standings
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {rankings.map((seat, idx) => {
+                      const ph = state?.players[String(seat)]?.handle ?? "Player";
+                      const isLast = idx === rankings.length - 1;
+                      const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`;
+                      const isThisMe = seat === myRole;
+                      return (
+                        <div
+                          key={seat}
+                          className={cn(
+                            "flex items-center gap-2 rounded-lg px-2 py-1",
+                            isThisMe && "border border-amber-600/30 bg-amber-900/40",
+                          )}
+                        >
+                          <span className="w-5 text-center text-[12px] leading-none">{medal}</span>
+                          <span className={cn(
+                            "flex-1 truncate text-[11px]",
+                            isThisMe ? "font-bold text-amber-100" : isLast ? "text-red-400/70" : "text-amber-200/70",
+                          )}>
+                            {ph}{isThisMe && " (you)"}
+                          </span>
+                          {isLast && !isThisMe && (
+                            <span className="text-[9px] text-red-500/60">last</span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
 
-              <div className="relative z-10 flex w-full flex-col gap-2.5 pt-1">
+              <div className="relative z-10 flex w-full flex-col gap-2.5">
                 <Button
                   onClick={() => {
                     setVictoryOpen(false);
@@ -1909,7 +2067,7 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
               </div>
 
               <div className="relative z-10 text-5xl leading-none select-none">
-                😔
+                {rankings && myRankIndex >= 0 && myRankIndex < rankings.length - 1 ? "😤" : "😔"}
               </div>
 
               <div className="relative z-10 text-center">
@@ -1917,9 +2075,50 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                   {winnerName ?? "Opponent"} wins!
                 </DialogTitle>
                 <DialogDescription className="mt-2 text-sm text-muted">
-                  Better luck next time.
+                  {rankings && myRankIndex >= 0
+                    ? myRankIndex === rankings.length - 1
+                      ? "You finished last. Better luck next time."
+                      : `You finished #${myRankIndex + 1}. Not bad!`
+                    : "Better luck next time."}
                 </DialogDescription>
               </div>
+
+              {/* Rankings list */}
+              {rankings && rankings.length > 1 && (
+                <div className="relative z-10 w-full rounded-xl border border-border/40 bg-background/30 p-3">
+                  <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-widest text-muted">
+                    Final Standings
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {rankings.map((seat, idx) => {
+                      const ph = state?.players[String(seat)]?.handle ?? "Player";
+                      const isLast = idx === rankings.length - 1;
+                      const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`;
+                      const isThisMe = seat === myRole;
+                      return (
+                        <div
+                          key={seat}
+                          className={cn(
+                            "flex items-center gap-2 rounded-lg px-2 py-1",
+                            isThisMe && "border border-border/50 bg-background/50",
+                          )}
+                        >
+                          <span className="w-5 text-center text-[12px] leading-none">{medal}</span>
+                          <span className={cn(
+                            "flex-1 truncate text-[11px]",
+                            isThisMe ? "font-bold text-foreground" : isLast ? "text-red-400/70" : "text-muted",
+                          )}>
+                            {ph}{isThisMe && " (you)"}
+                          </span>
+                          {isLast && !isThisMe && (
+                            <span className="text-[9px] text-red-500/60">last</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="relative z-10 flex w-full flex-col gap-2.5">
                 <Button
@@ -1943,6 +2142,15 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Flying cards — one element per card in flight */}
+      {flyingCards.map((fc) => (
+        <FlyingCard
+          key={fc.id}
+          fc={fc}
+          onDone={() => setFlyingCards(prev => prev.filter(c => c.id !== fc.id))}
+        />
+      ))}
     </div>
   );
 }
