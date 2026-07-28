@@ -24,6 +24,7 @@ import {
 } from "@/components/chat-message";
 import { ChatComposer } from "@/components/chat-composer";
 import { FloatingLounge } from "@/components/floating-lounge";
+import { RoomVoicePanel } from "@/components/room-voice-panel";
 import { getGameModule } from "@/games/registry";
 import { GameComingSoon } from "@/games/game-coming-soon";
 import { randomHandle } from "@/lib/data";
@@ -286,6 +287,10 @@ export default function RoomDetailPage() {
   const participantCount = connected ? onlineCount : 1;
   const grouped = annotateGroups(messages);
 
+  const uidToHandle = new Map(
+    displayPeers.filter((p) => p.uid).map((p) => [p.uid as string, p.handle]),
+  );
+
   const handleCloseRoom = async () => {
     // Tell everyone present immediately, then persist the closed status.
     closeForAll();
@@ -394,8 +399,8 @@ export default function RoomDetailPage() {
         )}
       </div>
 
-      {/* Participants · Room chat · Activity — parallel row, 1 : 2 : 1 */}
-      <div className="mt-5 grid gap-5 pr-1 lg:grid-cols-[1fr_2fr_1fr] lg:pr-4">
+      {/* Participants · Room chat · Voice · Activity */}
+      <div className="mt-5 grid gap-5 pr-1 lg:grid-cols-[1fr_2fr_1fr_1fr] lg:pr-4">
         {/* Participants */}
         <div className="flex h-[360px] flex-col overflow-hidden rounded-2xl border border-border bg-card p-4">
           <div className="flex items-center justify-between">
@@ -481,6 +486,14 @@ export default function RoomDetailPage() {
             disabled={!connected}
           />
         </div>
+
+        {/* Voice chat */}
+        <RoomVoicePanel
+          roomKey={params.id}
+          uid={selfUid}
+          handle={identity}
+          peerHandles={uidToHandle}
+        />
 
         {/* Activity */}
         <div className="flex h-[360px] flex-col overflow-hidden rounded-2xl border border-border bg-card p-4">
