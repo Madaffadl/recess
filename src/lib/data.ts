@@ -31,6 +31,27 @@ export const GAME_CATEGORIES = [
 
 export type GameCategory = (typeof GAME_CATEGORIES)[number];
 
+export type SpotlightConfig = {
+  theme: {
+    bg: string;
+    border: string;
+    accent: string;
+    accentText?: string;
+    heading: string;
+    body: string;
+    pillBg: string;
+    pillBorder: string;
+    pillText: string;
+    footerText: string;
+    footerBorder: string;
+  };
+  badges?: string[];
+  cta: string;
+  href: string;
+  tagline: string;
+  description?: string;
+};
+
 export type Game = {
   id: string;
   name: string;
@@ -40,6 +61,7 @@ export type Game = {
   icon: LucideIcon;
   isNew?: boolean;
   blurb: string;
+  spotlight?: SpotlightConfig;
 };
 
 export const GAMES: Game[] = [
@@ -82,6 +104,27 @@ export const GAMES: Game[] = [
     icon: Shield,
     isNew: true,
     blurb: "Place your fleet in secret, then hunt down every enemy ship before they find yours.",
+    spotlight: {
+      theme: {
+        bg: "#050F1C",
+        border: "#0F3050",
+        accent: "#00E59A",
+        accentText: "#050F1C",
+        heading: "#8FBCD4",
+        body: "#2A6090",
+        pillBg: "#091828",
+        pillBorder: "#0F3050",
+        pillText: "#8FBCD4",
+        footerText: "#2A6090",
+        footerBorder: "#0F3050",
+      },
+      badges: ["CARRIER", "BATTLESHIP", "DESTROYER", "SUBMARINE", "PATROL"],
+      cta: "DEPLOY →",
+      href: "/rooms?game=military-zone",
+      tagline: "NAVAL STRATEGY · 2 PLAYERS · LIVE MULTIPLAYER · 10s PER SALVO",
+      description:
+        "A two-player naval strategy game. Hide your fleet on a 10×10 grid, then hunt down every enemy vessel before they find yours. 10 seconds per salvo — no hesitation allowed.",
+    },
   },
   {
     id: "geo-challenge",
@@ -102,6 +145,37 @@ export const GAMES: Game[] = [
     icon: Palette,
     isNew: true,
     blurb: "Sketch, guess, and laugh. No art skills required.",
+  },
+  {
+    id: "ludo",
+    name: "Ludo",
+    category: "Casual",
+    players: 0,
+    emoji: "🎲",
+    icon: Dice5,
+    isNew: true,
+    blurb: "Roll the die, race four tokens home, and send rivals back to start. 2–4 players.",
+    spotlight: {
+      theme: {
+        bg: "#0d2a1c",
+        border: "#1b5e3a",
+        accent: "#e7b23f",
+        accentText: "#0d2a1c",
+        heading: "#a8e6c0",
+        body: "#2d7a4f",
+        pillBg: "#0a1f14",
+        pillBorder: "#1b5e3a",
+        pillText: "#a8e6c0",
+        footerText: "#2d7a4f",
+        footerBorder: "#1b5e3a",
+      },
+      badges: ["RED", "GREEN", "YELLOW", "BLUE"],
+      cta: "ROLL DICE →",
+      href: "/rooms?game=ludo",
+      tagline: "CLASSIC BOARD GAME · 2–4 PLAYERS · LIVE MULTIPLAYER · DICE & STRATEGY",
+      description:
+        "Roll the die, race all four tokens from yard to home, and send rivals back to start. Land on a 6 to move out of base and earn an extra turn. Last team standing wins.",
+    },
   },
   {
     id: "sudoku-arena",
@@ -172,6 +246,8 @@ export const GAMES: Game[] = [
 
 export const POPULAR_GAMES = [...GAMES].sort((a, b) => b.players - a.players);
 export const NEW_GAMES = GAMES.filter((g) => g.isNew);
+/** The most recently added game that has a spotlight config. */
+export const SPOTLIGHT_GAME = GAMES.filter((g) => g.spotlight).at(-1) ?? null;
 export const RECENTLY_PLAYED = [
   "military-zone",
   "geo-challenge",
@@ -296,6 +372,19 @@ export const ROOMS: Room[] = [
     visibility: "public",
     category: "Creative",
     status: "live",
+  },
+  {
+    id: "ludo-lounge",
+    title: "Ludo Lounge",
+    gameId: "ludo",
+    gameName: "Ludo",
+    gameEmoji: "🎲",
+    host: "SnackGremlin",
+    participants: ["SnackGremlin", "Nadia"],
+    capacity: 4,
+    visibility: "public",
+    category: "Casual",
+    status: "open",
   },
   {
     id: "sudoku-sprint",

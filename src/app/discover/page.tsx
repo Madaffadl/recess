@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, SearchX, Shield } from "lucide-react";
+import { Search, SearchX } from "lucide-react";
 import Link from "next/link";
 
 import { PageHeader, PageShell } from "@/components/page-shell";
@@ -14,10 +14,94 @@ import {
   NEW_GAMES,
   POPULAR_GAMES,
   RECENTLY_PLAYED,
+  SPOTLIGHT_GAME,
   type Game,
   type GameCategory,
 } from "@/lib/data";
 import { cn } from "@/lib/utils";
+
+function FeaturedSpotlight({ game }: { game: Game }) {
+  const s = game.spotlight!;
+  const t = s.theme;
+  const Icon = game.icon;
+  return (
+    <div
+      className="mt-8 overflow-hidden rounded-2xl border"
+      style={{ background: t.bg, borderColor: t.border }}
+    >
+      <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:gap-8">
+        {/* Icon */}
+        <div
+          className="flex size-16 shrink-0 items-center justify-center rounded-xl border text-4xl sm:size-20"
+          style={{ background: t.pillBg, borderColor: t.border }}
+        >
+          {game.emoji}
+        </div>
+
+        {/* Copy */}
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="rounded border px-2 py-0.5 font-mono text-[10px] tracking-widest"
+              style={{ borderColor: `${t.accent}99`, color: t.accent }}
+            >
+              NEW RELEASE
+            </span>
+            <Icon className="size-3" style={{ color: t.border }} />
+          </div>
+          <h2
+            className="mt-1.5 font-display text-xl font-semibold tracking-tight"
+            style={{ color: t.heading }}
+          >
+            {game.name}
+          </h2>
+          <p className="mt-1 text-sm leading-relaxed" style={{ color: t.body }}>
+            {s.description ?? game.blurb}
+          </p>
+
+          {s.badges && s.badges.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {s.badges.map((badge) => (
+                <span
+                  key={badge}
+                  className="rounded border px-1.5 py-0.5 font-mono text-[10px]"
+                  style={{
+                    background: t.pillBg,
+                    borderColor: t.pillBorder,
+                    color: t.pillText,
+                  }}
+                >
+                  {badge}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* CTA */}
+        <div className="shrink-0">
+          <Button
+            asChild
+            className="font-mono tracking-widest"
+            style={{
+              background: t.accent,
+              color: t.accentText ?? t.bg,
+            }}
+          >
+            <Link href={s.href}>{s.cta}</Link>
+          </Button>
+        </div>
+      </div>
+
+      <div
+        className="border-t px-6 py-2 font-mono text-[10px] tracking-widest"
+        style={{ borderColor: `${t.footerBorder}4d`, color: t.footerText }}
+      >
+        {s.tagline}
+      </div>
+    </div>
+  );
+}
 
 function GameGrid({ games }: { games: Game[] }) {
   return (
@@ -79,61 +163,8 @@ export default function DiscoverPage() {
         description="Browse everything you can play on your break. Search, filter by category, or pick up where you left off."
       />
 
-      {/* Featured spotlight — Military Zone */}
-      <div className="mt-8 overflow-hidden rounded-2xl border border-[#0F3050] bg-[#050F1C]">
-        <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:gap-8">
-          {/* Icon */}
-          <div className="flex size-16 shrink-0 items-center justify-center rounded-xl border border-[#0F3050] bg-[#091828] text-4xl sm:size-20">
-            🎖️
-          </div>
-
-          {/* Copy */}
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded border border-[#00E59A]/60 px-2 py-0.5 font-mono text-[10px] tracking-widest text-[#00E59A]">
-                NEW RELEASE
-              </span>
-              <Shield className="size-3 text-[#2A6090]" />
-            </div>
-            <h2 className="mt-1.5 font-display text-xl font-semibold tracking-tight text-[#8FBCD4]">
-              Military Zone
-            </h2>
-            <p className="mt-1 text-sm leading-relaxed text-[#2A6090]">
-              A two-player naval strategy game. Hide your fleet on a 10×10 grid,
-              then hunt down every enemy vessel before they find yours.
-              10 seconds per salvo — no hesitation allowed.
-            </p>
-
-            {/* Ship legend */}
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {["CARRIER", "BATTLESHIP", "DESTROYER", "SUBMARINE", "PATROL"].map((name) => (
-                <span
-                  key={name}
-                  className="rounded border border-[#0F3050] bg-[#091828] px-1.5 py-0.5 font-mono text-[10px] text-[#8FBCD4]"
-                >
-                  {name}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* CTA */}
-          <div className="shrink-0">
-            <Button
-              asChild
-              className="font-mono tracking-widest text-[#050F1C]"
-              style={{ background: "#00E59A" }}
-            >
-              <Link href="/rooms?game=military-zone">DEPLOY →</Link>
-            </Button>
-          </div>
-        </div>
-
-        {/* Bottom rule */}
-        <div className="border-t border-[#0F3050]/30 px-6 py-2 font-mono text-[10px] tracking-widest text-[#2A6090]">
-          NAVAL STRATEGY · 2 PLAYERS · LIVE MULTIPLAYER · 10s PER SALVO
-        </div>
-      </div>
+      {/* Featured spotlight — most recently added game with a spotlight config */}
+      {SPOTLIGHT_GAME && <FeaturedSpotlight game={SPOTLIGHT_GAME} />}
 
       {/* Search + categories */}
       <div className="mt-8 flex flex-col gap-4">
