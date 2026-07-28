@@ -22,19 +22,30 @@ export type LobbyProps = {
   onGameStarted: () => void;
 };
 
-export type Player = 1 | 2;
+export type Player = number;
 export type Seat = { id: string; handle: string } | null;
-export type GamePlayers = { "1": Seat; "2": Seat };
+export type GamePlayers = Record<string, Seat>;
 export type GameStatus = "waiting" | "active" | "finished";
+/** Per-seat readiness for the generic pre-game lobby (`state.ready`). */
+export type ReadyMap = Record<string, boolean>;
 
 export type GameState<TGame = unknown> = {
   players: GamePlayers;
+  /**
+   * Per-seat readiness for the generic pre-game lobby. Managed by the
+   * `game_ready` RPC; identity stays in `players`, runtime readiness here.
+   * Optional because it only exists while a session is `waiting`.
+   */
+  ready?: ReadyMap;
   turn: Player;
   startTurn?: Player;
-  /** null = ongoing · 0 = draw · 1|2 = winner */
-  winner: 0 | 1 | 2 | null;
+  /** null = ongoing · 0 = draw · seat number = winner */
+  winner: 0 | number | null;
   moveCount: number;
-  /** Game-specific payload (board, hands, etc.). */
+  /**
+   * Game-specific payload (board, hands, etc.). `null` until both players
+   * are ready and the game is initialised (see `game_ready`).
+   */
   game: TGame;
 };
 
@@ -46,11 +57,27 @@ export type GameSessionRow<TGame = unknown> = {
   status: GameStatus;
 };
 
+/** One live room participant (from Realtime Presence). */
+export type RoomParticipant = { handle: string; uid?: string };
+
 export type GameBoardProps = {
   roomKey: string;
   handle: string;
   /** Called by fullpage boards when the player exits back to the room lobby. */
   onExit?: () => void;
+  /** All participants currently present in the room (from Realtime Presence).
+   *  When provided, the ready lobby shows the full room instead of just the
+   *  two game seats. The game engine itself stays 2-player. */
+  participants?: RoomParticipant[];
+  /** True when this browser session belongs to the room host.
+   *  Controls which action button the lobby renders:
+   *    true  → yellow "Start Game" button (host only).
+   *    false → green "Ready" / "Cancel Ready" button (non-host players).
+   *  Absent → legacy behaviour (no host-controlled start). */
+  isHost?: boolean;
+  /** Called by the board when the host explicitly closes the room,
+   *  so the room page can broadcast `room_closed` to all other participants. */
+  onCloseRoom?: () => void;
 };
 
 export type GameModule = {

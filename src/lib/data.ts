@@ -1,6 +1,7 @@
 import {
   Globe2,
   Grid3x3,
+  Layers,
   Palette,
   Type,
   Brain,
@@ -64,6 +65,16 @@ export type Game = {
 };
 
 export const GAMES: Game[] = [
+  {
+    id: "uno",
+    name: "UNO",
+    category: "Cards",
+    players: 0,
+    emoji: "🃏",
+    icon: Layers,
+    isNew: true,
+    blurb: "Match colors and numbers, play action cards, and be the first to empty your hand.",
+  },
   {
     id: "connect-four",
     name: "Connect Four",

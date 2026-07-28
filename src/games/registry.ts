@@ -1,5 +1,6 @@
 import type { GameModule } from "./types";
 import { connectFour } from "./connect-four";
+import { uno } from "./uno";
 import { wordSnake } from "./word-snake";
 import { drawTogether } from "./draw-together/index";
 import { geoChallenge } from "./geo-challenge/index";
@@ -13,8 +14,7 @@ import { ludo } from "./ludo";
  * To add a game: create `src/games/<game>/`, add its `0017_<game>.sql`
  * migration, then add the module to this array.
  */
-const MODULES: GameModule[] = [connectFour, wordSnake, militaryZone, drawTogether, geoChallenge, ludo];
-
+const MODULES: GameModule[] = [connectFour, uno, wordSnake, militaryZone, drawTogether, geoChallenge, ludo];
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]));
 
