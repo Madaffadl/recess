@@ -31,6 +31,8 @@ import {
   type LudoColor,
   type LudoPlayer,
 } from "./logic";
+import { PawnOverlay, type PawnToken } from "./pawn-overlay";
+import { useLudoSfx } from "./use-ludo-sfx";
 
 /* ============================================================================
  * Ludo owns its own visual identity — a cozy tabletop: green felt table, warm
@@ -73,14 +75,6 @@ const PLAYER: readonly PlayerTheme[] = [
 function rgba(hex: string, a: number): string {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
-}
-
-function tokenStyle(t: PlayerTheme): React.CSSProperties {
-  return {
-    background: `radial-gradient(circle at 33% 27%, ${t.light}, ${t.base} 56%, ${t.dark} 100%)`,
-    borderColor: "rgba(255,255,255,0.65)",
-    boxShadow: `inset 0 -2px 4px rgba(0,0,0,0.35), 0 3px 7px rgba(0,0,0,0.4)`,
-  };
 }
 
 // ─── Static board classification (built once) ───────────────────────────────
@@ -329,6 +323,8 @@ export function LudoBoard({ roomKey, handle }: GameBoardProps) {
   );
   const hasMove = activeMovable.some(Boolean);
 
+  useLudoSfx({ session, myTurn, dice });
+
   // After rolling, if the active player has no legal move (e.g. any non-6 while
   // every token is still in the yard), show the die briefly then auto-pass.
   // Only the active player's client fires this, so there's no multi-client race.
@@ -359,6 +355,22 @@ export function LudoBoard({ roomKey, handle }: GameBoardProps) {
       return { pIdx, tIdx, cell, dx, dy };
     });
   }, [players]);
+
+  // PawnToken array fed into the 3-D overlay — recomputed when positions or
+  // turn state change, but cells/offsets are stable refs so this is cheap.
+  const pawnTokens = useMemo<PawnToken[]>(
+    () =>
+      tokenViews.map(({ pIdx, tIdx, cell, dx, dy }) => ({
+        pIdx,
+        tIdx,
+        cell,
+        dx,
+        dy,
+        color: (players[pIdx]?.color ?? 0) as LudoColor,
+        canMove: pIdx === turnIndex && !!activeMovable[tIdx],
+      })),
+    [tokenViews, players, turnIndex, activeMovable],
+  );
 
   // ── Status banner ──
   let banner: React.ReactNode = null;
@@ -588,8 +600,8 @@ export function LudoBoard({ roomKey, handle }: GameBoardProps) {
               <div
                 className="absolute grid place-items-center"
                 style={{
-                  left: `${((CENTER[1] - 1 + 0.5) / GRID) * 100}%`,
-                  top: `${((CENTER[0] - 1 + 0.5) / GRID) * 100}%`,
+                  left: `${((CENTER[1] + 0.5) / GRID) * 100}%`,
+                  top: `${((CENTER[0] + 0.5) / GRID) * 100}%`,
                   width: `${(3 / GRID) * 100}%`,
                   height: `${(3 / GRID) * 100}%`,
                   transform: "translate(-50%, -50%)",
@@ -606,47 +618,35 @@ export function LudoBoard({ roomKey, handle }: GameBoardProps) {
                 </span>
               </div>
 
-              {/* Tokens — sized ~65% of a cell so they sit clearly inside it. */}
-              <div className="pointer-events-none absolute inset-0">
+              {/* 3-D pawn overlay — purely visual, pointer-events: none.
+                  Orthographic camera frustum is fixed to the 15×15 world grid
+                  so the canvas is fully responsive at every breakpoint. */}
+              <PawnOverlay tokens={pawnTokens} />
+
+              {/* Invisible hit targets — rendered only for tokens the current
+                  player can legally move.  Slightly oversized (8 %) for easy
+                  tapping on mobile. */}
+              <div className="pointer-events-none absolute inset-0" style={{ zIndex: 20 }}>
                 {tokenViews.map(({ pIdx, tIdx, cell, dx, dy }) => {
-                  const p = players[pIdx];
-                  const t = PLAYER[p.color];
-                  const isCurrent = pIdx === turnIndex;
-                  const canMove = isCurrent && activeMovable[tIdx];
-                  const clickable = needMove && pIdx === myIndex && activeMovable[tIdx];
+                  const clickable = needMove && pIdx === myIndex && !!activeMovable[tIdx];
+                  if (!clickable) return null;
                   const { left, top } = pct(cell);
                   return (
                     <button
-                      key={`${pIdx}-${tIdx}`}
+                      key={`hit-${pIdx}-${tIdx}`}
                       type="button"
-                      disabled={!clickable}
-                      onClick={() => clickable && move(tIdx)}
-                      aria-label={`${t.name} token ${tIdx + 1}`}
-                      className={cn(
-                        "absolute size-[4.3%] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition-[left,top,transform] duration-300 ease-out",
-                        clickable
-                          ? "pointer-events-auto cursor-pointer hover:scale-110 active:scale-95"
-                          : "pointer-events-none"
-                      )}
+                      className="absolute pointer-events-auto -translate-x-1/2 -translate-y-1/2 rounded-full cursor-pointer active:scale-95"
                       style={{
                         left: `calc(${left} + ${dx}%)`,
                         top: `calc(${top} + ${dy}%)`,
-                        zIndex: clickable ? 2 : 1,
-                        ...tokenStyle(t),
-                        ...(clickable
-                          ? { outline: `2px solid ${T.gold}`, outlineOffset: "1px" }
-                          : {}),
+                        width: "8%",
+                        height: "8%",
+                        opacity: 0,
+                        background: "transparent",
                       }}
-                    >
-                      {canMove && (
-                        <motion.span
-                          className="absolute inset-0 rounded-full"
-                          style={{ boxShadow: `0 0 0 2px ${T.gold}` }}
-                          animate={{ scale: [1, 1.4], opacity: [0.75, 0] }}
-                          transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
-                        />
-                      )}
-                    </button>
+                      onClick={() => move(tIdx)}
+                      aria-label={`${PLAYER[players[pIdx].color].name} token ${tIdx + 1}`}
+                    />
                   );
                 })}
               </div>
