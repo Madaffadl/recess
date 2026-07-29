@@ -412,6 +412,8 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
   const handAreaRef = useRef<HTMLDivElement>(null);
   const pendingWildElRef = useRef<HTMLButtonElement | null>(null);
   const pendingDrawCountRef = useRef(0);
+  const seatElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const prevLastEventRef = useRef<object | null | undefined>(undefined);
 
   useEffect(() => {
     const palette = ["#ffd23f", "#e8532a", "#d5342b", "#f0a01a", "#ffe6b0", "#c22018", "#ff8a3d"];
@@ -624,6 +626,32 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
     }
     if (cur === null) prevUnoDeclaredRef.current = null;
   }, [game?.unoDeclared]);
+
+  // Spectator / observer animation: fire fly for any opponent action detected via lastEvent
+  useEffect(() => {
+    if (!game?.lastEvent) return;
+    const evt = game.lastEvent;
+    // Skip the very first snapshot so we don't replay historical events on load
+    if (prevLastEventRef.current === undefined) {
+      prevLastEventRef.current = evt;
+      return;
+    }
+    if (prevLastEventRef.current === evt) return;
+    prevLastEventRef.current = evt;
+    // Own actions are already animated by the click handlers
+    if (evt.seat === myRole) return;
+    const seatEl = seatElsRef.current.get(String(evt.seat));
+    if (!seatEl) return;
+    const seatCenter = centerOf(seatEl);
+    if (evt.card !== null && discardPileRef.current) {
+      const to = centerOf(discardPileRef.current);
+      spawnFly(1, evt.card, seatCenter.x, seatCenter.y, to.x, to.y);
+    } else if (evt.drewCards.length > 0 && drawPileRef.current) {
+      const from = centerOf(drawPileRef.current);
+      spawnFly(evt.drewCards.length, "back", from.x, from.y, seatCenter.x, seatCenter.y, -8);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game?.lastEvent]);
 
   const myHand = seatKey && game ? (game.hands[seatKey] ?? []) : [];
 
@@ -952,6 +980,10 @@ export function UnoBoard({ roomKey, handle, participants, isHost, onCloseRoom }:
                     return (
                       <div
                         key={oSeat}
+                        ref={(el: HTMLDivElement | null) => {
+                          if (el) seatElsRef.current.set(oSeat, el);
+                          else seatElsRef.current.delete(oSeat);
+                        }}
                         style={{
                           position: "absolute",
                           left: pos.stage.left,
